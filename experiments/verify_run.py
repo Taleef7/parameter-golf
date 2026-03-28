@@ -23,7 +23,7 @@ def main():
         print(f"Error: log file not found: {log_path}", file=sys.stderr)
         sys.exit(1)
 
-    match = re.search(r"final_int8_zlib_roundtrip val_bpb:([0-9.]+)", content)
+    match = re.search(r"final_int8_zlib_roundtrip\b.*\bval_bpb:([0-9.]+)", content)
     if not match:
         print("Error: 'final_int8_zlib_roundtrip val_bpb:' not found in log", file=sys.stderr)
         sys.exit(1)
