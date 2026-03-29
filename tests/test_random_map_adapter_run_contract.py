@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "experiments" / "compare_random_map_runs.py"
+AUDIT_HELPER = ROOT / "experiments" / "audit_random_map_runtime_proof.py"
 SCRIPT = ROOT / "experiments" / "train_gpt_random_map_adapter.py"
 RUN_CONFIGS = ROOT / "experiments" / "run_configs.md"
 RUNPOD_GUIDE = ROOT / "experiments" / "runpod_guide.md"
@@ -21,6 +22,7 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.helper_source = HELPER.read_text(encoding="utf-8")
+        cls.audit_source = AUDIT_HELPER.read_text(encoding="utf-8")
         cls.script_source = SCRIPT.read_text(encoding="utf-8")
         cls.run_configs = RUN_CONFIGS.read_text(encoding="utf-8")
         cls.runpod_guide = RUNPOD_GUIDE.read_text(encoding="utf-8")
@@ -34,12 +36,21 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             text=True,
         )
 
+    def run_audit(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["python", str(AUDIT_HELPER), *args],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+
     def write_log(self, path: Path, metric: str, value: float) -> None:
         path.write_text(
             "\n".join(
                 [
                     "random_map_adapter:enabled=True rank=8 layers=[9, 10] targets=['q', 'v'] seed=1729 scale_init=0.0100",
                     f"{metric} val_bpb:{value:.4f}",
+                    "Total submission size int6+lzma: 15728640 bytes",
                     "artifact_bytes: 15728640",
                 ]
             )
@@ -49,8 +60,17 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
 
     def test_helper_source_reuses_verifier_and_enforces_expected_metric(self) -> None:
         self.assertIn("verify_run.py", self.helper_source)
-        self.assertIn("EXPECTED_METRIC = \"final_int6_sliding_window_s64\"", self.helper_source)
+        self.assertIn('EXPECTED_METRIC = "final_int6_sliding_window_s64"', self.helper_source)
         self.assertIn("adapter_minus_baseline_bpb_delta", self.helper_source)
+
+    def test_audit_source_rejects_placeholders_and_requires_runtime_signals(self) -> None:
+        self.assertIn("PLACEHOLDER_MARKERS", self.audit_source)
+        self.assertIn("preserved_windows_host_note", self.audit_source)
+        self.assertIn("appended_contract_fixture", self.audit_source)
+        self.assertIn("cmd.exe failure header", self.audit_source)
+        self.assertIn("Total submission size int6+lzma", self.audit_source)
+        self.assertIn("random_map_adapter:enabled=False", self.audit_source)
+        self.assertIn("random_map_adapter:enabled=True", self.audit_source)
 
     def test_helper_reports_negative_delta_for_fixture_pair(self) -> None:
         result = self.run_helper(BASELINE_FIXTURE, ADAPTER_FIXTURE)
@@ -99,7 +119,7 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.assertIn("expected final_int6_sliding_window_s64", result.stderr)
             self.assertIn("legal_ttt", result.stderr)
 
-    def test_docs_lock_one_non_ttt_comparison_protocol(self) -> None:
+    def test_docs_lock_one_non_ttt_runtime_proof_protocol(self) -> None:
         for doc in (self.run_configs, self.runpod_guide, self.artifact_readme):
             self.assertIn("TTT_ENABLED=0", doc)
             self.assertIn("EVAL_STRIDE=64", doc)
@@ -113,6 +133,24 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.assertIn("baseline_no_adapter.log", doc)
             self.assertIn("random_map_adapter.log", doc)
             self.assertIn("final_int6_sliding_window_s64", doc)
+            self.assertIn("Total submission size int6+lzma:", doc)
+            self.assertIn("preserved_windows_host_note", doc)
+            self.assertIn("appended_contract_fixture", doc)
+
+    def test_docs_name_audit_command_and_placeholder_rejection_rule(self) -> None:
+        for doc in (self.run_configs, self.runpod_guide, self.artifact_readme):
+            self.assertIn("python experiments/audit_random_map_runtime_proof.py", doc)
+            self.assertRegex(doc, r"do not (accept|treat).*placeholder|rejects known placeholder")
+
+    def test_cli_audit_rejects_fixed_placeholder_logs(self) -> None:
+        result = self.run_audit(
+            "--baseline",
+            "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log",
+            "--adapter",
+            "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("placeholder marker", result.stderr)
 
     def test_docs_only_name_supported_random_map_knobs(self) -> None:
         for knob in [
@@ -135,7 +173,7 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
         self.assertTrue(ARTIFACT_README.is_file())
         self.assertEqual(ARTIFACT_SCRIPT.read_text(encoding="utf-8"), self.script_source)
         self.assertIn("compare_random_map_runs.py", self.artifact_readme)
-        self.assertIn(str(ARTIFACT_DIR).replace(str(ROOT) + "/", "records/") if False else "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack", self.artifact_readme)
+        self.assertIn("records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack", self.artifact_readme)
 
 
 if __name__ == "__main__":

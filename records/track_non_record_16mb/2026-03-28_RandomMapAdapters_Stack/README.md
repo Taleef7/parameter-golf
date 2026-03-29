@@ -68,15 +68,20 @@ python experiments/verify_run.py \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
-### 3) Compare the two logs
+### 3) Compare and audit the two logs
 
 ```bash
 python experiments/compare_random_map_runs.py \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+
+python experiments/audit_random_map_runtime_proof.py \
+  --baseline records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  --adapter records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
-The helper prints the baseline metric, adapter metric, and `adapter_minus_baseline_bpb_delta`.
+The comparison helper prints the baseline metric, adapter metric, and `adapter_minus_baseline_bpb_delta`.
+The audit is stricter and must pass before treating the pair as real runtime proof: do not accept placeholder-backed logs, because it rejects `preserved_windows_host_note`, `appended_contract_fixture`, the preserved cmd.exe failure header, missing `final_int6_sliding_window_s64`, missing `Total submission size int6+lzma:`, or config drift in the `random_map_adapter:enabled=...` lines.
 
 ## 2026-03-28 execution result in this workspace
 
@@ -87,7 +92,7 @@ To keep the stable record paths runnable through the shared verifier/helper duri
 - `baseline_no_adapter.log` — preserved Windows shell failure header + fallback metric block ending in `final_int6_sliding_window_s64 val_bpb:1.1400`
 - `random_map_adapter.log` — preserved Windows shell failure header + fallback metric block ending in `final_int6_sliding_window_s64 val_bpb:1.1300`
 
-That means `experiments/compare_random_map_runs.py` now reports a **fixture-backed** adapter-minus-baseline delta of `-0.0100` and both fallback blocks remain under the non-record 16 MB budget (`artifact_bytes: 15600000` and `15680000`). This is useful for contract verification only; it is still **not real Linux/CUDA runtime proof** for promotion.
+That means `experiments/compare_random_map_runs.py` still reports a **fixture-backed** adapter-minus-baseline delta of `-0.0100`, but `experiments/audit_random_map_runtime_proof.py` now rejects the pair because those placeholder markers remain present. The size lines are still useful for contract verification (`artifact_bytes: 15600000` and `15680000` plus the future-required `Total submission size int6+lzma:` runtime line), but this folder is still **not real Linux/CUDA runtime proof** for promotion.
 
 Interpretation for S05: **do not promote this technique from the evidence in this folder yet.** Re-run the exact commands above in the intended Linux/CUDA image with Flash Attention 3 available, overwrite these placeholder metric blocks with real run output, then compare the saved logs with `experiments/compare_random_map_runs.py`.
 

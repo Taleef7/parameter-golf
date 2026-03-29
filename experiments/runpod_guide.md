@@ -200,6 +200,10 @@ python experiments/verify_run.py \
 python experiments/compare_random_map_runs.py \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+
+python experiments/audit_random_map_runtime_proof.py \
+  --baseline records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  --adapter records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
 Expected comparison behavior:
@@ -207,6 +211,8 @@ Expected comparison behavior:
 - both logs resolve to `chosen_metric: final_int6_sliding_window_s64`
 - the helper prints both chosen metrics
 - the helper prints `adapter_minus_baseline_bpb_delta: +/-0.xxxx`
+- do not accept placeholder-backed proof: the audit rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header
+- the audit also requires the baseline/adaptor `random_map_adapter:enabled=...` config lines plus `Total submission size int6+lzma:` in each saved log
 
 ## 6. Troubleshooting
 

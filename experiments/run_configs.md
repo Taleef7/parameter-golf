@@ -179,9 +179,15 @@ python experiments/train_gpt_random_map_adapter.py \
 python experiments/compare_random_map_runs.py \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+
+python experiments/audit_random_map_runtime_proof.py \
+  --baseline records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  --adapter records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
-The helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT `final_int6_sliding_window_s64` contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
+The comparison helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT `final_int6_sliding_window_s64` contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
+
+The audit helper is stricter: do not accept placeholder-backed proof. It rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header; it also requires each saved log to contain the expected `random_map_adapter:enabled=...` config line, a `final_int6_sliding_window_s64` runtime line, and a `Total submission size int6+lzma:` line.
 
 ## Notes for future updates
 
