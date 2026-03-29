@@ -1,87 +1,132 @@
-# Ablation Run Configs
+# Integrated Stack Run Configs (S03)
 
-All 8 ablation experiments for S02. Run each with:
-```
+This file documents the real env-var surface for the integrated stack in `experiments/train_gpt_stack.py`.
+It intentionally omits stale S02 toggles that are no longer wired in the script.
+
+## Canonical success metrics
+
+Use `python experiments/verify_run.py <log>` to extract the accepted end-of-run metric.
+The verifier prefers metrics in this order:
+
+1. `legal_ttt`
+2. `final_int6_sliding_window_s64`
+3. `final_int6_sliding_window`
+4. `final_int6_roundtrip`
+
+Interpretation:
+
+- `TTT_ENABLED=1` -> `legal_ttt` is the canonical success metric.
+- `TTT_ENABLED=0` -> `final_int6_sliding_window_s64` is the preferred non-TTT fallback when stride-64 eval runs.
+- If stride-64 is unavailable, the verifier falls back to `final_int6_sliding_window`, then `final_int6_roundtrip`.
+
+## Promoted S03 stack
+
+The integrated stack already defaults to the intended S03 architecture in `train_gpt_stack.py`, so the main run contract is mostly about making the key knobs explicit.
+
+### Canonical integrated run (TTT enabled)
+
+```bash
+TTT_ENABLED=1 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+EVAL_STRIDE=64 \
 python experiments/train_gpt_stack.py
 ```
-with the listed env vars exported in the shell before running.
 
----
+### Canonical integrated run (TTT disabled fallback)
 
-## 1. FullSOTA
+```bash
+TTT_ENABLED=0 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+EVAL_STRIDE=64 \
+python experiments/train_gpt_stack.py
+```
 
-**Config name:** FullSOTA  
-**Env var overrides:** _(all defaults from train_gpt_stack.py)_  
-**Expected bpb:** ~1.119  
-**Description:** Run the SOTA script with no modifications — establishes the full-stack ceiling.  
-**Run as:** `python experiments/train_gpt_stack.py`
+## Real env vars that matter for S03
 
----
+### Runtime / data
 
-## 2. WiderLonger
+| Env var | Default | Why you might change it |
+|---|---:|---|
+| `DATA_PATH` | `./data/datasets/fineweb10B_sp1024` | Point the script at the dataset root. |
+| `TOKENIZER_PATH` | `./data/tokenizers/fineweb_1024_bpe.model` | Override the SentencePiece model path. |
+| `RUN_ID` | random UUID | Control the emitted log filename under `logs/`. |
+| `SEED` | `1337` | Reproduce or vary the run seed. |
+| `MAX_WALLCLOCK_SECONDS` | `600.0` | Cap training wallclock before early stop. |
 
-**Config name:** WiderLonger  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048`  
-**Expected bpb:** ~1.155  
-**Description:** Increase model depth, MLP width, and sequence length to test capacity scaling.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 python experiments/train_gpt_stack.py`
+### Training / evaluation controls
 
----
+| Env var | Default | Why you might change it |
+|---|---:|---|
+| `ITERATIONS` | `20000` | Shorten or extend training. |
+| `TRAIN_BATCH_TOKENS` | `786432` | Adjust global train batch size. |
+| `TRAIN_SEQ_LEN` | `2048` | Set training context length. |
+| `EVAL_SEQ_LEN` | `2048` | Override eval context length. |
+| `VAL_BATCH_SIZE` | `524288` | Adjust validation batch size. |
+| `VAL_LOSS_EVERY` | `4000` | Change validation cadence. |
+| `TRAIN_LOG_EVERY` | `500` | Change train logging cadence. |
+| `EVAL_STRIDE` | `64` | Controls sliding-window eval and the `final_int6_sliding_window_s64` fallback. |
+| `WARMUP_STEPS` | `20` | Number of optimizer warmup steps. |
+| `WARMDOWN_ITERS` | `3500` | Length of wallclock-aware warmdown. |
 
-## 3. WiderLonger+SWA
+### Integrated architecture knobs
 
-**Config name:** WiderLonger+SWA  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04`  
-**Expected bpb:** ~1.145  
-**Description:** Adds Stochastic Weight Averaging and Muon weight decay on top of WiderLonger.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 python experiments/train_gpt_stack.py`
+| Env var | Default | S03 setting / role |
+|---|---:|---|
+| `NUM_LAYERS` | `11` | Integrated stack depth. |
+| `MODEL_DIM` | `512` | Model width. |
+| `NUM_HEADS` | `8` | Attention heads. |
+| `NUM_KV_HEADS` | `4` | GQA KV heads. |
+| `MLP_MULT` | `3.0` | 3x MLP expansion. |
+| `BIGRAM_VOCAB_SIZE` | `2048` | Bigram-hash vocabulary. |
+| `BIGRAM_DIM` | `128` | Bigram embedding width. |
+| `XSA_LAST_N` | `4` | Enables XSA on the last 4 blocks. |
+| `ROPE_DIMS` | `16` | Partial RoPE width. |
+| `LN_SCALE` | `1` | Per-layer `1/sqrt(layer+1)` scaling enabled. |
+| `VE_ENABLED` | `1` | Value embedding is on by default. |
+| `VE_DIM` | `128` | Value embedding width. |
+| `VE_LAYERS` | `9,10` | Value embedding target layers. |
+| `TIE_EMBEDDINGS` | `1` | Weight tying is on by default. |
 
----
+### Optimizer / averaging knobs
 
-## 4. WiderLonger+SWA+XSA
+| Env var | Default | S03 setting / role |
+|---|---:|---|
+| `MATRIX_LR` | `0.025` | Parallel Muon bank learning rate. |
+| `SCALAR_LR` | `0.025` | Scalar/control-tensor AdamW learning rate. |
+| `TIED_EMBED_LR` | `0.035` | Token-embedding LR when embeddings are tied. |
+| `HEAD_LR` | `0.008` | LM head LR when embeddings are untied. |
+| `MUON_MOMENTUM` | `0.99` | Integrated Muon momentum target. |
+| `MUON_MOMENTUM_WARMUP_START` | `0.92` | Starting momentum during warmup. |
+| `MUON_MOMENTUM_WARMUP_STEPS` | `1500` | Momentum warmup length. |
+| `MUON_BACKEND_STEPS` | `5` | Newton-Schulz backend iterations. |
+| `MUON_WD` | `0.04` | Matrix weight decay. |
+| `ADAM_WD` | `0.04` | AdamW weight decay. |
+| `BETA1` | `0.9` | Adam beta1. |
+| `BETA2` | `0.95` | Adam beta2. |
+| `ADAM_EPS` | `1e-8` | Adam epsilon. |
+| `GRAD_CLIP_NORM` | `0.3` | Global training grad clip. |
+| `SWA_ENABLED` | `1` | Tight SWA enabled by default. |
+| `SWA_EVERY` | `50` | SWA cadence. |
+| `LAWA_ENABLED` | `0` | Optional LAWA alternative, off by default. |
+| `LAWA_K` | `10` | LAWA queue length. |
+| `LAWA_FREQ` | `100` | LAWA snapshot cadence. |
 
-**Config name:** WiderLonger+SWA+XSA  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4`  
-**Expected bpb:** ~1.131  
-**Description:** Adds Cross-Sequence Attention on the last 4 layers on top of WiderLonger+SWA.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 python experiments/train_gpt_stack.py`
+### TTT knobs
 
----
+| Env var | Default | S03 setting / role |
+|---|---:|---|
+| `TTT_ENABLED` | `0` | Turn on legal score-first TTT. |
+| `TTT_LR` | `0.002` | TTT SGD learning rate. |
+| `TTT_EPOCHS` | `3` | TTT epochs per chunk. |
+| `TTT_CHUNK_TOKENS` | `32768` | Non-overlapping chunk size. |
+| `TTT_FREEZE_BLOCKS` | `2` | Freeze the first N blocks during TTT. |
+| `TTT_MOMENTUM` | `0.9` | TTT SGD momentum. |
+| `TTT_BATCH_SEQS` | `32` | Per-rank TTT microbatch in sequences. |
+| `TTT_GRAD_CLIP` | `1.0` | TTT gradient clipping. |
 
-## 5. +EMA+GPTQ
+## Notes for future updates
 
-**Config name:** +EMA+GPTQ  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1`  
-**Expected bpb:** ~1.123  
-**Description:** Adds EMA averaging and GPTQ INT6 quantization-aware training on top of previous stack.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 python experiments/train_gpt_stack.py`
-
----
-
-## 6. +LateQAT
-
-**Config name:** +LateQAT  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15`  
-**Expected bpb:** ~1.125  
-**Description:** Adds late-stage quantization-aware training triggered at 15% loss threshold.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15 python experiments/train_gpt_stack.py`
-
----
-
-## 7. +LeakyReLU2
-
-**Config name:** +LeakyReLU2  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15 LEAKY_SLOPE=0.5`  
-**Expected bpb:** ~1.119  
-**Description:** Increases LeakyReLU slope to 0.5 for stronger negative gradient flow.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15 LEAKY_SLOPE=0.5 python experiments/train_gpt_stack.py`
-
----
-
-## 8. +TTT
-
-**Config name:** +TTT  
-**Env var overrides:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15 LEAKY_SLOPE=0.5 TTT_ENABLED=1`  
-**Expected bpb:** ~1.116  
-**Description:** Adds Test-Time Training on top of the full stack — expected best result.  
-**Run as:** `NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 SWA_ENABLED=1 MUON_WD=0.04 XSA_LAST_N=4 EMA_ENABLED=1 GPTQ_INT6=1 LATE_QAT_THRESHOLD=0.15 LEAKY_SLOPE=0.5 TTT_ENABLED=1 python experiments/train_gpt_stack.py`
+- If `train_gpt_stack.py` adds or removes env vars, update this file and `experiments/runpod_guide.md` in the same change.
+- Keep docs aligned with the verifier's metric precedence so operator guidance matches the actual success extraction logic.

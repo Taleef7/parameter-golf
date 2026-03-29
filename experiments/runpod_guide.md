@@ -1,195 +1,159 @@
-# RunPod Execution Guide — S02 Ablation Experiments
+# RunPod Execution Guide — S03 Integrated Stack
 
 **Platform:** RunPod  
 **Pod type:** 1× H100 SXM5 80 GB  
 **Docker image:** `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`  
 **Disk:** 50 GB  
-**Expected runtime per run:** ~30–45 min on 1× H100 (wallclock cap 10 h max; typical full run ~2.5 h; baseline stopped at ~10 min/wallclock for demo)
+**Target artifact:** `experiments/train_gpt_stack.py`
 
-> **⚠️ Linux/RunPod only.** The Flash Attention 3 import in `train_gpt_stack.py` will fail on Windows or macOS. Run all experiments on the RunPod pod, not locally.
+> **Linux/CUDA only.** `train_gpt_stack.py` imports Flash Attention 3 and requires CUDA.
 
----
-
-## 1. Pod Setup
+## 1. Pod setup
 
 After SSH-ing into the pod:
 
 ```bash
-# 1. Clone / upload repo
 cd /workspace
 git clone <your-repo-url> parameter-golf
 cd parameter-golf
-
-# 2. Install missing Python dependency
 pip install zstandard
-
-# 3. Confirm dataset path (must exist before any run)
 ls /workspace/data/datasets/fineweb10B_sp1024/
-# If missing, create a symlink to wherever the dataset lives:
-# ln -s /path/to/dataset /workspace/data/datasets/fineweb10B_sp1024
-
-# 4. Create log directory
 mkdir -p logs
 ```
 
----
+If the dataset is stored elsewhere, either set `DATA_PATH` explicitly or create a symlink to `/workspace/data/datasets/fineweb10B_sp1024`.
 
-## 2. Global Env Vars (set once per session)
+## 2. Canonical S03 run contract
 
-```bash
-export MAX_WALLCLOCK_SECONDS=72000   # 20 h cap — ensures a full run completes
-export SWA_EVERY=50                  # default; set explicitly to avoid surprises
-```
+The integrated script already defaults to the promoted S03 architecture. For an operator, the important knobs are the runtime cap, eval stride, and whether legal TTT is enabled.
 
-> **Note:** `TTT_ENABLED=1` only affects eval time, not training — disable it for speed during ablations and re-enable only for the final S03 stack run.
-
----
-
-## 3. Ablation Runs
-
-Run each block in order. Each block exports env vars, launches training with stdout+stderr redirected to a log file, and then extracts the final `val_bpb`.
-
----
-
-### Run 1 — FullSOTA (baseline ceiling)
+### Preferred proof run (`legal_ttt`)
 
 ```bash
+MAX_WALLCLOCK_SECONDS=600 \
+ITERATIONS=9000 \
+EVAL_STRIDE=64 \
+TTT_ENABLED=1 \
 python experiments/train_gpt_stack.py \
-  > logs/run_fullsota.txt 2>&1
-python experiments/verify_run.py logs/run_fullsota.txt
-# Expected val_bpb: ~1.119
+  > logs/stack_legal_ttt.txt 2>&1
+python experiments/verify_run.py logs/stack_legal_ttt.txt
 ```
 
----
+Expected verifier behavior:
 
-### Run 2 — WiderLonger
+- prints `chosen_metric: legal_ttt`
+- prints `val_bpb: <value>`
+
+### Non-TTT fallback proof (`final_int6_sliding_window_s64`)
 
 ```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_widerlonger.txt 2>&1
-python experiments/verify_run.py logs/run_widerlonger.txt
-# Expected val_bpb: ~1.155
+MAX_WALLCLOCK_SECONDS=600 \
+ITERATIONS=9000 \
+EVAL_STRIDE=64 \
+TTT_ENABLED=0 \
+python experiments/train_gpt_stack.py \
+  > logs/stack_no_ttt.txt 2>&1
+python experiments/verify_run.py logs/stack_no_ttt.txt
 ```
 
----
+Expected verifier behavior:
 
-### Run 3 — WiderLonger+SWA
+- prints `chosen_metric: final_int6_sliding_window_s64`
+- prints `val_bpb: <value>`
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_widerlonger_swa.txt 2>&1
-python experiments/verify_run.py logs/run_widerlonger_swa.txt
-# Expected val_bpb: ~1.145
-```
+## 3. Real env vars still wired in the script
 
----
+Use only env vars that exist in `experiments/train_gpt_stack.py`. The commonly touched ones for S03 are:
 
-### Run 4 — WiderLonger+SWA+XSA
+### Data and reproducibility
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  XSA_LAST_N=4 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_widerlonger_swa_xsa.txt 2>&1
-python experiments/verify_run.py logs/run_widerlonger_swa_xsa.txt
-# Expected val_bpb: ~1.131
-```
+- `DATA_PATH`
+- `TOKENIZER_PATH`
+- `RUN_ID`
+- `SEED`
 
----
+### Runtime and evaluation
 
-### Run 5 — +EMA+GPTQ
+- `MAX_WALLCLOCK_SECONDS`
+- `ITERATIONS`
+- `TRAIN_BATCH_TOKENS`
+- `TRAIN_SEQ_LEN`
+- `EVAL_SEQ_LEN`
+- `VAL_BATCH_SIZE`
+- `VAL_LOSS_EVERY`
+- `TRAIN_LOG_EVERY`
+- `EVAL_STRIDE`
+- `WARMUP_STEPS`
+- `WARMDOWN_ITERS`
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  XSA_LAST_N=4 \
-  EMA_ENABLED=1 GPTQ_INT6=1 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_ema_gptq.txt 2>&1
-python experiments/verify_run.py logs/run_ema_gptq.txt
-# Expected val_bpb: ~1.123
-```
+### Architecture / stack selection
 
----
+- `NUM_LAYERS`
+- `MODEL_DIM`
+- `NUM_HEADS`
+- `NUM_KV_HEADS`
+- `MLP_MULT`
+- `BIGRAM_VOCAB_SIZE`
+- `BIGRAM_DIM`
+- `XSA_LAST_N`
+- `ROPE_DIMS`
+- `LN_SCALE`
+- `VE_ENABLED`
+- `VE_DIM`
+- `VE_LAYERS`
+- `TIE_EMBEDDINGS`
 
-### Run 6 — +LateQAT
+### Optimization / averaging
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  XSA_LAST_N=4 \
-  EMA_ENABLED=1 GPTQ_INT6=1 \
-  LATE_QAT_THRESHOLD=0.15 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_lateqat.txt 2>&1
-python experiments/verify_run.py logs/run_lateqat.txt
-# Expected val_bpb: ~1.125
-```
+- `MATRIX_LR`
+- `SCALAR_LR`
+- `TIED_EMBED_LR`
+- `HEAD_LR`
+- `MUON_MOMENTUM`
+- `MUON_MOMENTUM_WARMUP_START`
+- `MUON_MOMENTUM_WARMUP_STEPS`
+- `MUON_BACKEND_STEPS`
+- `MUON_WD`
+- `ADAM_WD`
+- `BETA1`
+- `BETA2`
+- `ADAM_EPS`
+- `GRAD_CLIP_NORM`
+- `SWA_ENABLED`
+- `SWA_EVERY`
+- `LAWA_ENABLED`
+- `LAWA_K`
+- `LAWA_FREQ`
 
----
+### TTT
 
-### Run 7 — +LeakyReLU2
+- `TTT_ENABLED`
+- `TTT_LR`
+- `TTT_EPOCHS`
+- `TTT_CHUNK_TOKENS`
+- `TTT_FREEZE_BLOCKS`
+- `TTT_MOMENTUM`
+- `TTT_BATCH_SEQS`
+- `TTT_GRAD_CLIP`
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  XSA_LAST_N=4 \
-  EMA_ENABLED=1 GPTQ_INT6=1 \
-  LATE_QAT_THRESHOLD=0.15 \
-  LEAKY_SLOPE=0.5 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_leakyrelu2.txt 2>&1
-python experiments/verify_run.py logs/run_leakyrelu2.txt
-# Expected val_bpb: ~1.119
-```
+## 4. What the verifier accepts
 
----
+`experiments/verify_run.py` ignores stale aliases and accepts only these metrics, in order:
 
-### Run 8 — +TTT (full stack)
+1. `legal_ttt`
+2. `final_int6_sliding_window_s64`
+3. `final_int6_sliding_window`
+4. `final_int6_roundtrip`
 
-```bash
-NUM_LAYERS=11 MLP_MULT=3.0 TRAIN_SEQ_LEN=2048 \
-  SWA_ENABLED=1 MUON_WD=0.04 \
-  XSA_LAST_N=4 \
-  EMA_ENABLED=1 GPTQ_INT6=1 \
-  LATE_QAT_THRESHOLD=0.15 \
-  LEAKY_SLOPE=0.5 \
-  TTT_ENABLED=1 \
-  python experiments/train_gpt_stack.py \
-  > logs/run_ttt.txt 2>&1
-python experiments/verify_run.py logs/run_ttt.txt
-# Expected val_bpb: ~1.116
-```
-
----
-
-## 4. Recording Results in EXPERIMENTS.md
-
-After each run, append a row to `EXPERIMENTS.md`:
-
-```
-| N | <config name> | <key env vars> | <bpb from verify_run.py> | <notes> |
-```
-
-Example after Run 1:
-```
-| 2 | FullSOTA | (all defaults) | 1.119 | Full SOTA stack ceiling |
-```
-
-Row numbering: row 1 is the pre-existing baseline entry; new runs start at row 2.
-
----
+If none of those appear, the verifier exits non-zero and prints a useful error naming the accepted metrics.
 
 ## 5. Troubleshooting
 
-| Symptom | Fix |
-|---|---|
-| `ModuleNotFoundError: zstandard` | `pip install zstandard` |
-| `FileNotFoundError: fineweb10B_sp1024` | Check dataset path; create symlink |
-| `ImportError: flash_attn` | Must run on Linux/CUDA pod, not Windows |
-| `verify_run.py` prints no `val_bpb` | Run likely crashed early; check log tail for error |
-| Pod OOM | Reduce `TRAIN_SEQ_LEN` to 1024 or `NUM_LAYERS` to 8 |
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `ModuleNotFoundError: zstandard` | Optional compression dependency missing | `pip install zstandard` |
+| `FileNotFoundError` for dataset shards | `DATA_PATH` does not point at FineWeb shards | Fix `DATA_PATH` or create the expected symlink |
+| `RuntimeError: CUDA is required` | Run attempted outside a CUDA pod | Move to RunPod/Linux with GPU |
+| `Error: no accepted metric found in log` | Run crashed early or log only contains stale aliases | Inspect the log tail and confirm one of the accepted metrics was emitted |
+| Verifier chooses `final_int6_roundtrip` | Sliding-window metrics did not run | Check `EVAL_STRIDE` and whether the script completed eval |
+| Verifier chooses `final_int6_sliding_window_s64` instead of `legal_ttt` | `TTT_ENABLED=0` or TTT did not complete | Re-run with `TTT_ENABLED=1` and inspect the TTT log section |
