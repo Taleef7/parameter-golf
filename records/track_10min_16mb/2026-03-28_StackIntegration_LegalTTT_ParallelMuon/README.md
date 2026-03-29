@@ -1,28 +1,48 @@
 # Stack Integration + Legal TTT + Parallel Muon
 
-**Promoted S03 record artifact:** `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py`
+**Reviewer-ready submission folder:** `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/`
 
-**Canonical metric:** `legal_ttt` when `TTT_ENABLED=1` | **Fallback metric:** `final_int6_sliding_window_s64` when `TTT_ENABLED=0` | **Artifact boundary:** `< 16 MB`
+This folder packages the promoted 2026-03-28 submission artifact as a self-contained review surface. The executable `train_gpt.py` here is byte-identical to the already-proven 2026-03-23 record script, so the three copied seed logs below are inherited evidence for this promoted folder rather than newly rerun 2026-03-28 training jobs.
 
-This folder is the reproducible S03 home for the integrated stack. It promotes `experiments/train_gpt_stack.py` into a concrete record artifact without replacing the repository-root `train_gpt.py` newcomer baseline.
+## Audited submission summary
 
-## Integrated stack
+- **Canonical metric:** `legal_ttt`
+- **Three-seed mean val_bpb:** 1.119367
+- **Three-seed std:** 0.000464
+- **Conservative max total submission size:** 15,990,006 bytes
+- **Artifact-size contract:** under `16,000,000` bytes
+- **Provenance status:** byte-identical promoted/proven `train_gpt.py` scripts (`sha256 df7aa00cc6a0c959fbc95f2665ec4ef6b7f869f05d20f4523510a1ad16f1e674`)
 
-The promoted `train_gpt.py` carries the S03 stack exactly as copied from `experiments/train_gpt_stack.py`:
+## Inherited 3-seed evidence
 
-- parameter banking with Parallel Muon
-- LeakyReLU(0.5)^2 MLP
-- BigramHash + partial RoPE + XSA last-4
-- VE128 on layers 9-10
-- int6 + lzma export path
-- legal score-first TTT support
-- sliding-window evaluation with stride-64 fallback metric
+The three logs in this folder were copied from `records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/` after `experiments/audit_submission_package.py` confirmed that:
 
-## Canonical 1×H100 run contract
+1. each log resolves to `chosen_metric: legal_ttt`
+2. the promoted 2026-03-28 `train_gpt.py` matches the proven 2026-03-23 `train_gpt.py` byte-for-byte
+3. every audited artifact stays within the `16,000,000` byte envelope
 
-Run from the repository root so the default dataset/tokenizer paths resolve as documented elsewhere in the repo.
+| Seed | Chosen metric | `val_bpb` | `Total submission size int6+lzma` | Evidence file in this folder | Canonical alias? |
+|------|---------------|-----------|-----------------------------------|------------------------------|------------------|
+| 1337 | `legal_ttt` | 1.1192 | 15,977,386 | `train_seed1337.log` | No |
+| 42 | `legal_ttt` | 1.1200 | 15,876,510 | `train_seed42.log` | No |
+| 2025 | `legal_ttt` | 1.1189 | 15,990,006 | `train_seed2025.log` | Yes (`train.log` alias) |
+| **Mean / std** | `legal_ttt` | **1.119367 +/- 0.000464** | **max 15,990,006** | copied 3-seed evidence | -- |
 
-### Preferred proof run (`TTT_ENABLED=1` → `legal_ttt`)
+## Log inventory and the `train.log` alias
+
+This folder intentionally carries both the copied per-seed evidence and one reviewer-friendly canonical alias:
+
+- `train_seed1337.log` - copied audited seed log
+- `train_seed42.log` - copied audited seed log
+- `train_seed2025.log` - copied audited seed log
+- `train.log` - reviewer-friendly alias for `train_seed2025.log`; these two files are byte-identical and share sha256 `408f9895815ad8f2317aa42a14b4b1953df9828a480d1bd572b630d487c8f3ff`
+- `train_blocked_local.log` - preserved local Windows failure log for environment diagnosis only; it is not part of the submission evidence
+
+A reviewer who reads only `train.log` still sees a real accepted proof log. A reviewer who reads all three `train_seed*.log` files gets the full inherited evidence behind the mean/std summary.
+
+## Exact run contract
+
+Run from the repository root so the default dataset and tokenizer paths resolve correctly.
 
 ```bash
 MAX_WALLCLOCK_SECONDS=600 \
@@ -31,6 +51,7 @@ EVAL_STRIDE=64 \
 TTT_ENABLED=1 \
 python records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py \
   > records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log 2>&1
+
 python experiments/verify_run.py \
   records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log
 ```
@@ -38,68 +59,37 @@ python experiments/verify_run.py \
 Expected verifier behavior:
 
 - prints `chosen_metric: legal_ttt`
-- prints `val_bpb: <value>`
-- exits non-zero if the log does not contain an accepted S03 metric
+- prints `val_bpb: <value>` from the accepted metric path
+- rejects logs that only expose fallback metrics
 
-### Fallback proof run (`TTT_ENABLED=0` → `final_int6_sliding_window_s64`)
+The promoted script also supports the non-TTT fallback path `TTT_ENABLED=0`, in which case `experiments/verify_run.py` falls back to `final_int6_sliding_window_s64`. That fallback is part of the runtime contract, but the submission numbers in this folder come from the audited `legal_ttt` runs above.
+
+## Submission metadata source
+
+`submission.json` in this folder was generated from the audit payload rather than hand-entered numbers. It records:
+
+- the exact audited mean `val_bpb`
+- the audited `val_bpb` standard deviation
+- the conservative max `bytes_total` across the three copied seed logs
+- the current `train_gpt.py` code size for the promoted artifact
+
+To regenerate the package summary mechanically, rerun:
 
 ```bash
-MAX_WALLCLOCK_SECONDS=600 \
-ITERATIONS=9000 \
-EVAL_STRIDE=64 \
-TTT_ENABLED=0 \
-python records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py \
-  > records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log 2>&1
-python experiments/verify_run.py \
-  records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log
+python experiments/audit_submission_package.py \
+  records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed1337.log \
+  records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed42.log \
+  records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed2025.log
 ```
 
-Expected verifier behavior:
+## Relationship to S04 random-map adapters
 
-- prints `chosen_metric: final_int6_sliding_window_s64`
-- prints `val_bpb: <value>`
-- treats `legal_ttt` as preferred if both metrics appear in the same log
+`records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/` is a separate non-record package. It documents an S04 random-map adapter experiment with its own non-TTT comparison contract and placeholder/local-runtime evidence. This S04 package is not part of the submission evidence. It does not supply the numbers, logs, or provenance for this promoted S05 submission folder.
 
-## Artifact-size and proof-log expectations
+## Key artifact paths
 
-The promoted script logs the compressed export size as:
-
-- `Serialized model int6+lzma: ... bytes`
-- `Total submission size int6+lzma: ... bytes`
-
-S03 treats the run as acceptable only if the recorded total submission size stays below `16,000,000` bytes (`< 16 MB`).
-
-The accepted proof log for this promoted artifact lives at:
-
-- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log`
-
-T02 creates the folder contract and T03 is responsible for placing the accepted proof log there.
-
-## Current execution status
-
-The promoted artifact is byte-identical to the already-proven stack under:
-
-- `records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_gpt.py`
-
-To keep S03's canonical record folder self-contained, the accepted proof log from that identical artifact was copied into:
-
-- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log`
-
-Measured result from the accepted log:
-
-- `chosen_metric: legal_ttt`
-- `val_bpb: 1.1189`
-- `Total submission size int6+lzma: 15990006 bytes`
-- source run: 8×H100 SXM, `SEED=2025`
-
-The blocked local Windows proof attempt is still preserved separately for diagnosis at:
-
-- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_blocked_local.log`
-
-That local attempt fails during interpreter startup with `ModuleNotFoundError: No module named 'flash_attn_interface'`, so this workspace still does not satisfy the Linux/CUDA runtime dependency contract for rerunning the stack locally.
-
-## Relationship to other entrypoints
-
-- `train_gpt.py` at the repository root remains the readable newcomer baseline and must stay untouched.
-- `experiments/train_gpt_stack.py` remains the editable source-of-truth staging script for the integrated stack.
-- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py` is the promoted reproducible record artifact for downstream S03 work.
+- `train_gpt.py` - promoted submission script
+- `README.md` - reviewer-facing provenance and run contract
+- `submission.json` - audit-derived submission metadata
+- `train.log` - canonical reviewer-facing alias
+- `train_seed1337.log`, `train_seed42.log`, `train_seed2025.log` - copied inherited evidence
