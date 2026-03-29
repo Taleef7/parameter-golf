@@ -126,7 +126,64 @@ python experiments/train_gpt_stack.py
 | `TTT_BATCH_SEQS` | `32` | Per-rank TTT microbatch in sequences. |
 | `TTT_GRAD_CLIP` | `1.0` | TTT gradient clipping. |
 
+## S04 random-map-adapter comparison protocol (non-TTT)
+
+Use this section for the first adapter-vs-baseline comparison on top of the promoted S03 stack. The goal is one reproducible non-TTT A/B pair, not a free-form sweep.
+
+### Shared contract for both runs
+
+Keep these settings identical between baseline and adapter runs:
+
+- `TTT_ENABLED=0`
+- `EVAL_STRIDE=64`
+- `ITERATIONS=9000`
+- `MAX_WALLCLOCK_SECONDS=600`
+- identical dataset/tokenizer paths, seed, and remaining stack knobs
+
+Both logs must resolve to `chosen_metric: final_int6_sliding_window_s64`. If either log resolves to `legal_ttt` or any fallback other than `final_int6_sliding_window_s64`, do not compare them.
+
+### Baseline run (adapter off)
+
+```bash
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=0 \
+RUN_ID=s04_random_map_baseline \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log 2>&1
+```
+
+### Adapter run (adapter on)
+
+```bash
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=1 \
+RANDOM_MAP_ADAPTER_RANK=8 \
+RANDOM_MAP_ADAPTER_LAYERS=9,10 \
+RANDOM_MAP_ADAPTER_TARGETS=q,v \
+RANDOM_MAP_ADAPTER_SEED=1729 \
+RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RUN_ID=s04_random_map_adapter \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
+```
+
+### Verification / comparison
+
+```bash
+python experiments/compare_random_map_runs.py \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+```
+
+The helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT `final_int6_sliding_window_s64` contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
+
 ## Notes for future updates
 
-- If `train_gpt_stack.py` adds or removes env vars, update this file and `experiments/runpod_guide.md` in the same change.
+- If `train_gpt_stack.py` or `train_gpt_random_map_adapter.py` adds or removes env vars, update this file and `experiments/runpod_guide.md` in the same change.
 - Keep docs aligned with the verifier's metric precedence so operator guidance matches the actual success extraction logic.

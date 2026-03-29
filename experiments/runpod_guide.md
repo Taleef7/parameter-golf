@@ -147,7 +147,68 @@ Use only env vars that exist in `experiments/train_gpt_stack.py`. The commonly t
 
 If none of those appear, the verifier exits non-zero and prints a useful error naming the accepted metrics.
 
-## 5. Troubleshooting
+## 5. S04 random-map-adapter runbook (Linux/CUDA, non-TTT only)
+
+Use this when executing the first S04 comparison. The baseline and adapter runs must share the same non-TTT runtime contract so the only intentional delta is the adapter configuration.
+
+### Shared settings that must stay identical
+
+- `TTT_ENABLED=0`
+- `EVAL_STRIDE=64`
+- `ITERATIONS=9000`
+- `MAX_WALLCLOCK_SECONDS=600`
+- same dataset/tokenizer paths, seed, and remaining stack knobs
+
+### Baseline command
+
+```bash
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=0 \
+RUN_ID=s04_random_map_baseline \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log 2>&1
+python experiments/verify_run.py \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log
+```
+
+### Adapter command
+
+```bash
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=1 \
+RANDOM_MAP_ADAPTER_RANK=8 \
+RANDOM_MAP_ADAPTER_LAYERS=9,10 \
+RANDOM_MAP_ADAPTER_TARGETS=q,v \
+RANDOM_MAP_ADAPTER_SEED=1729 \
+RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RUN_ID=s04_random_map_adapter \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
+python experiments/verify_run.py \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+```
+
+### Comparison command
+
+```bash
+python experiments/compare_random_map_runs.py \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+```
+
+Expected comparison behavior:
+
+- both logs resolve to `chosen_metric: final_int6_sliding_window_s64`
+- the helper prints both chosen metrics
+- the helper prints `adapter_minus_baseline_bpb_delta: +/-0.xxxx`
+
+## 6. Troubleshooting
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
@@ -155,5 +216,5 @@ If none of those appear, the verifier exits non-zero and prints a useful error n
 | `FileNotFoundError` for dataset shards | `DATA_PATH` does not point at FineWeb shards | Fix `DATA_PATH` or create the expected symlink |
 | `RuntimeError: CUDA is required` | Run attempted outside a CUDA pod | Move to RunPod/Linux with GPU |
 | `Error: no accepted metric found in log` | Run crashed early or log only contains stale aliases | Inspect the log tail and confirm one of the accepted metrics was emitted |
-| Verifier chooses `final_int6_roundtrip` | Sliding-window metrics did not run | Check `EVAL_STRIDE` and whether the script completed eval |
-| Verifier chooses `final_int6_sliding_window_s64` instead of `legal_ttt` | `TTT_ENABLED=0` or TTT did not complete | Re-run with `TTT_ENABLED=1` and inspect the TTT log section |
+| `compare_random_map_runs.py` rejects `legal_ttt` | The run was not kept on the first S04 non-TTT contract | Re-run with `TTT_ENABLED=0` and confirm stride-64 eval completed |
+| Verifier chooses `final_int6_roundtrip` or `final_int6_sliding_window` | Sliding-window stride-64 eval did not complete | Check `EVAL_STRIDE`, inspect the log tail, and do not trust the comparison until both logs choose `final_int6_sliding_window_s64` |
