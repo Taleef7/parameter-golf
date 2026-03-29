@@ -1,5 +1,10 @@
 # OpenAI Compute Grant Application — Parameter Golf
 
+## Submission Status
+
+- **Status:** Submitted
+- **Recorded for S06:** This repository now treats the compute-grant application as a submitted artifact, not a planned draft. The requested-compute narrative below is preserved as the original application text.
+
 ## Project Description
 
 Parameter Golf is an open benchmarking challenge (openai/parameter-golf) that asks: how low can you push bits-per-byte on the FineWeb validation set within strict parameter budgets? I am competing in the **10-minute / 16 MB parameter** track, where the current public baseline sits at ~1.22 bpb and top entries approach ~1.16 bpb.
