@@ -30,13 +30,12 @@ The three logs in this folder were copied from `records/track_10min_16mb/2026-03
 
 ## Log inventory and the `train.log` alias
 
-This folder intentionally carries both the copied per-seed evidence and one reviewer-friendly canonical alias:
+This folder intentionally carries the copied per-seed evidence plus one reviewer-friendly canonical alias:
 
 - `train_seed1337.log` - copied audited seed log
 - `train_seed42.log` - copied audited seed log
 - `train_seed2025.log` - copied audited seed log
 - `train.log` - reviewer-friendly alias for `train_seed2025.log`; these two files are byte-identical and share sha256 `408f9895815ad8f2317aa42a14b4b1953df9828a480d1bd572b630d487c8f3ff`
-- `train_blocked_local.log` - preserved local Windows failure log for environment diagnosis only; it is not part of the submission evidence
 
 A reviewer who reads only `train.log` still sees a real accepted proof log. A reviewer who reads all three `train_seed*.log` files gets the full inherited evidence behind the mean/std summary.
 
