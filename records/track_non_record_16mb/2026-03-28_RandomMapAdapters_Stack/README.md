@@ -78,6 +78,17 @@ python experiments/compare_random_map_runs.py \
 
 The helper prints the baseline metric, adapter metric, and `adapter_minus_baseline_bpb_delta`.
 
+## 2026-03-28 execution result in this workspace
+
+A local execution attempt was run from this repository on a Windows 11 host with an NVIDIA GeForce RTX 5070 Ti Laptop GPU. The packaged entrypoint failed before training/eval in both modes because Flash Attention 3 was not installed in this environment:
+
+- `baseline_no_adapter.log` — `ModuleNotFoundError: No module named 'flash_attn_interface'`
+- `random_map_adapter.log` — `ModuleNotFoundError: No module named 'flash_attn_interface'`
+
+Because both runs died at import time, `experiments/verify_run.py` could not resolve `chosen_metric: final_int6_sliding_window_s64`, `experiments/compare_random_map_runs.py` could not compute an adapter-minus-baseline BPB delta, and the <16 MB artifact-size outcome was not measured. This is preserved as an **incomplete runtime proof**, not a success and not a measured negative result.
+
+Interpretation for S05: **do not promote this technique from the evidence in this folder yet.** Re-run the exact commands above in the intended Linux/CUDA image with Flash Attention 3 available, then compare the saved logs with `experiments/compare_random_map_runs.py`.
+
 ## Promotion / failure criteria
 
 Promote the technique to S05 consideration only if all of the following are true:
