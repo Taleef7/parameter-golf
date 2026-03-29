@@ -77,21 +77,26 @@ T02 creates the folder contract and T03 is responsible for placing the accepted 
 
 ## Current execution status
 
-Attempted the documented command from this workspace with:
+The promoted artifact is byte-identical to the already-proven stack under:
 
-```bash
-MAX_WALLCLOCK_SECONDS=600
-ITERATIONS=9000
-EVAL_STRIDE=64
-TTT_ENABLED=1
-python records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py
-```
+- `records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_gpt.py`
 
-The preserved log at `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log` currently records a local environment failure:
+To keep S03's canonical record folder self-contained, the accepted proof log from that identical artifact was copied into:
 
-- `ModuleNotFoundError` during interpreter startup before any accepted metric or artifact-size lines are emitted
+- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log`
 
-That means this workspace does not currently satisfy the README's runtime dependency contract for the promoted stack, so no accepted `legal_ttt` or fallback metric was emitted and no proof BPB is claimed yet.
+Measured result from the accepted log:
+
+- `chosen_metric: legal_ttt`
+- `val_bpb: 1.1189`
+- `Total submission size int6+lzma: 15990006 bytes`
+- source run: 8×H100 SXM, `SEED=2025`
+
+The blocked local Windows proof attempt is still preserved separately for diagnosis at:
+
+- `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_blocked_local.log`
+
+That local attempt fails during interpreter startup with `ModuleNotFoundError: No module named 'flash_attn_interface'`, so this workspace still does not satisfy the Linux/CUDA runtime dependency contract for rerunning the stack locally.
 
 ## Relationship to other entrypoints
 
