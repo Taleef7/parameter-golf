@@ -75,6 +75,24 @@ The accepted proof log for this promoted artifact lives at:
 
 T02 creates the folder contract and T03 is responsible for placing the accepted proof log there.
 
+## Current execution status
+
+Attempted the documented command from this workspace with:
+
+```bash
+MAX_WALLCLOCK_SECONDS=600
+ITERATIONS=9000
+EVAL_STRIDE=64
+TTT_ENABLED=1
+python records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py
+```
+
+The preserved log at `records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log` currently records a local environment failure:
+
+- `ModuleNotFoundError` during interpreter startup before any accepted metric or artifact-size lines are emitted
+
+That means this workspace does not currently satisfy the README's runtime dependency contract for the promoted stack, so no accepted `legal_ttt` or fallback metric was emitted and no proof BPB is claimed yet.
+
 ## Relationship to other entrypoints
 
 - `train_gpt.py` at the repository root remains the readable newcomer baseline and must stay untouched.
