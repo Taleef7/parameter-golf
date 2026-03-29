@@ -1,0 +1,152 @@
+{
+  "accepted_metric_fallbacks": [
+    "legal_ttt",
+    "final_int6_sliding_window_s64",
+    "final_int6_sliding_window",
+    "final_int6_roundtrip",
+    "final_int8_zlib_roundtrip"
+  ],
+  "aggregate": {
+    "counted_row_count": 10,
+    "distinct_counted_families": 10,
+    "inherited_row_count": 1,
+    "minimum_real_rows": 5,
+    "minimum_real_rows_satisfied": true,
+    "row_count": 11,
+    "size_limit_bytes": 16000000
+  },
+  "rows": [
+    {
+      "chosen_metric": "final_int8_zlib_roundtrip",
+      "counts_toward_target": true,
+      "family_id": "2026-03-17_naive_baseline",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-17_NaiveBaseline/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-17_NaiveBaseline",
+      "size_label": "int8+zlib",
+      "total_submission_bytes": 15863489,
+      "val_bpb": 1.2244
+    },
+    {
+      "chosen_metric": "final_int8_zlib_roundtrip",
+      "counts_toward_target": true,
+      "family_id": "2026-03-18_fp16_embed_wd3600",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-18_FP16Embed_WD3600/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-18_FP16Embed_WD3600",
+      "size_label": "int8+zlib",
+      "total_submission_bytes": 15896222,
+      "val_bpb": 1.2197
+    },
+    {
+      "chosen_metric": "final_int8_zlib_roundtrip",
+      "counts_toward_target": true,
+      "family_id": "2026-03-18_long_context_seq2048",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-18_LongContextSeq2048/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-18_LongContextSeq2048",
+      "size_label": "int8+zlib",
+      "total_submission_bytes": 15867270,
+      "val_bpb": 1.2058
+    },
+    {
+      "chosen_metric": "final_int8_zlib_roundtrip",
+      "counts_toward_target": true,
+      "family_id": "2026-03-19_10l_mixed_precision",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-19_10L_MixedPrecision/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-19_10L_MixedPrecision",
+      "size_label": "int8+zlib",
+      "total_submission_bytes": 15928974,
+      "val_bpb": 1.2147
+    },
+    {
+      "chosen_metric": "final_int8_zlib_roundtrip",
+      "counts_toward_target": true,
+      "family_id": "2026-03-19_warmdown_quantization",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-19_WarmdownQuantization/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-19_WarmdownQuantization",
+      "size_label": "int8+zlib",
+      "total_submission_bytes": 15977717,
+      "val_bpb": 1.1789
+    },
+    {
+      "chosen_metric": "final_int6_sliding_window",
+      "counts_toward_target": true,
+      "family_id": "2026-03-20_11l_efficient_partial_xsa_fa3_swa120",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-20_11L_EfficientPartialXSA_FA3_SWA120/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-20_11L_EfficientPartialXSA_FA3_SWA120",
+      "size_label": "int6+zstd",
+      "total_submission_bytes": 15892986,
+      "val_bpb": 1.1307
+    },
+    {
+      "chosen_metric": "final_int6_sliding_window",
+      "counts_toward_target": true,
+      "family_id": "2026-03-20_11l_xsa4_ema_int6_mlp3x_wd04",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-20_11L_XSA4_EMA_Int6_MLP3x_WD04_1.1271/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-20_11L_XSA4_EMA_Int6_MLP3x_WD04_1.1271",
+      "size_label": "int6+zstd",
+      "total_submission_bytes": 15534645,
+      "val_bpb": 1.1271
+    },
+    {
+      "chosen_metric": "final_int6_sliding_window",
+      "counts_toward_target": true,
+      "family_id": "2026-03-21_11l_xsa4_ema_partial_rope_late_qat",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-21_11L_XSA4_EMA_PartialRoPE_LateQAT_1.1248/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-21_11L_XSA4_EMA_PartialRoPE_LateQAT_1.1248",
+      "size_label": "int6+zstd",
+      "total_submission_bytes": 15612308,
+      "val_bpb": 1.1248
+    },
+    {
+      "chosen_metric": "final_int6_sliding_window",
+      "counts_toward_target": true,
+      "family_id": "2026-03-22_11l_ema_gptq_lite_warmdown3500_qat015",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-22_11L_EMA_GPTQ-lite_warmdown3500_QAT015_1.1233/train.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-22_11L_EMA_GPTQ-lite_warmdown3500_QAT015_1.1233",
+      "size_label": "int6+zstd",
+      "total_submission_bytes": 15555017,
+      "val_bpb": 1.1228
+    },
+    {
+      "chosen_metric": "legal_ttt",
+      "counts_toward_target": true,
+      "family_id": "legal_ttt_parallel_muon",
+      "inherited_from": null,
+      "log_path": "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_seed2025.log",
+      "note": null,
+      "record_dir": "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon",
+      "size_label": "int6+lzma",
+      "total_submission_bytes": 15990006,
+      "val_bpb": 1.1189
+    },
+    {
+      "chosen_metric": "legal_ttt",
+      "counts_toward_target": false,
+      "family_id": "legal_ttt_parallel_muon",
+      "inherited_from": "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_seed2025.log",
+      "log_path": "records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log",
+      "note": "Promoted folder inherits the already-counted legal_ttt proof family instead of adding a second ablation row.",
+      "record_dir": "records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon",
+      "size_label": "int6+lzma",
+      "total_submission_bytes": 15990006,
+      "val_bpb": 1.1189
+    }
+  ]
+}
