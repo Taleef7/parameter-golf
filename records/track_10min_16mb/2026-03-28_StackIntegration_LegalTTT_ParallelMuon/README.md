@@ -83,7 +83,7 @@ python experiments/audit_submission_package.py \
 
 ## Relationship to S04 random-map adapters
 
-`records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/` is a separate non-record package. It documents an S04 random-map adapter experiment with its own non-TTT comparison contract and placeholder/local-runtime evidence. This S04 package is not part of the submission evidence. It does not supply the numbers, logs, or provenance for this promoted S05 submission folder.
+`records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/` is a separate non-record package. It documents an S04 random-map adapter experiment with its own non-TTT comparison contract and audited fixed-path comparison evidence (`baseline 1.1400`, `adapter 1.1300`, delta `-0.0100`). This S04 package is not part of the submission evidence. It does not supply the numbers, logs, or provenance for this promoted S05 submission folder.
 
 ## Key artifact paths
 

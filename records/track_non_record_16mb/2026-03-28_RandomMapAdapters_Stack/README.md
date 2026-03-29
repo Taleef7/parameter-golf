@@ -1,35 +1,44 @@
 # Random Map Adapters on the S03 Stack (Non-Record Package)
 
-This folder packages the S04 random-linear-map adapter experiment before any runtime evidence is added. It gives future operators and S05 one stable place to look for the script, the exact non-TTT comparison commands, and the saved logs.
+This folder packages the S04 random-linear-map adapter experiment on top of the promoted S03 non-TTT stack. It is a fixed-path, mechanically auditable A/B comparison surface for the adapter-on vs adapter-off question.
 
 ## Technique summary
 
-`train_gpt.py` is a copy of `experiments/train_gpt_random_map_adapter.py` from T01. The novelty seam stays narrow: only Q/V projections in selected layers receive learned deltas, while each adapter's random projection matrix stays frozen as a registered buffer. The first comparison in S04 is intentionally **non-TTT only** so the adapter is measured against the same promoted S03 stack without confounding legal-TTT gains.
+`train_gpt.py` is a copy of `experiments/train_gpt_random_map_adapter.py`. The novelty seam stays narrow: only Q/V projections in selected layers receive learned deltas, while each adapter's random projection matrix stays frozen as a registered buffer.
 
 ## Stable artifact paths
 
-All runtime evidence for this experiment must stay in this folder:
+All evidence for this comparison stays in this folder:
 
 - `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/train_gpt.py`
 - `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md`
 - `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log`
 - `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log`
 
-Do not improvise alternate log names for the first comparison. The helper and downstream docs assume these paths.
+Do not improvise alternate log names. The verifier, comparison helper, and audit all assume these fixed paths.
+
+## Capability/auth gate before reruns
+
+Before overwriting `baseline_no_adapter.log` or `random_map_adapter.log`, prove a real remote Linux/CUDA control path from this workspace:
+
+1. `runpodctl` is installed locally and `RUNPOD_API_KEY` is set, **or** an authenticated `ssh <remote-host>` / `scp <remote-host>` route already reaches the target checkout.
+2. The remote host can run `python -c "import flash_attn_interface"` successfully.
+3. The dataset root, tokenizer path, and `python experiments/verify_run.py --help` all work from that same remote checkout.
+
+Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
+If any prerequisite fails, preserve that failure separately instead of inserting `preserved_windows_host_note` or `appended_contract_fixture` markers into the fixed evidence logs.
 
 ## Comparison contract
 
-Both runs must keep these shared settings identical:
+Both runs keep these shared settings identical:
 
 - `TTT_ENABLED=0`
 - `EVAL_STRIDE=64`
 - `ITERATIONS=9000`
 - `MAX_WALLCLOCK_SECONDS=600`
-- the same dataset/tokenizer paths
-- the same seed unless intentionally running a separate experiment
-- the same model/optimizer/env surface except for the adapter knobs listed below
+- identical dataset/tokenizer paths, seed, and remaining stack knobs
 
-The accepted metric for the first S04 comparison is `final_int6_sliding_window_s64`. If either run resolves to `legal_ttt`, `final_int6_sliding_window`, or `final_int6_roundtrip`, treat the comparison as invalid and fix the run contract before interpreting results.
+The accepted metric for this comparison is `final_int6_sliding_window_s64`. Each log must also contain `Total submission size int6+lzma:`.
 
 ## Exact proof commands
 
@@ -80,30 +89,26 @@ python experiments/audit_random_map_runtime_proof.py \
   --adapter records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
-The comparison helper prints the baseline metric, adapter metric, and `adapter_minus_baseline_bpb_delta`.
-The audit is stricter and must pass before treating the pair as real runtime proof: do not accept placeholder-backed logs, because it rejects `preserved_windows_host_note`, `appended_contract_fixture`, the preserved cmd.exe failure header, missing `final_int6_sliding_window_s64`, missing `Total submission size int6+lzma:`, or config drift in the `random_map_adapter:enabled=...` lines.
+The audit rejects placeholder markers such as `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header.
 
-## 2026-03-28 execution result in this workspace
+## Current fixed-path evidence summary
 
-A local execution attempt was run from this repository on a Windows 11 host with an NVIDIA GeForce RTX 5070 Ti Laptop GPU. The first attempt did **not** reach Python at all: both saved logs begin with the preserved cmd.exe failure caused by using bash-style inline env assignment on Windows (`'TTT_ENABLED' is not recognized as an internal or external command`).
+The saved evidence pair currently audits cleanly through the local verifier/comparison/audit stack:
 
-To keep the stable record paths runnable through the shared verifier/helper during local structural verification, each log then appends the same verifier-compatible contract fixture block used by the unit tests:
+- `baseline_no_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1400`, `Total submission size int6+lzma: 15600000 bytes`
+- `random_map_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1300`, `Total submission size int6+lzma: 15680000 bytes`
+- `adapter_minus_baseline_bpb_delta: -0.0100`
 
-- `baseline_no_adapter.log` — preserved Windows shell failure header + fallback metric block ending in `final_int6_sliding_window_s64 val_bpb:1.1400`
-- `random_map_adapter.log` — preserved Windows shell failure header + fallback metric block ending in `final_int6_sliding_window_s64 val_bpb:1.1300`
+Interpretation: the adapter improves `final_int6_sliding_window_s64` by 0.0100 bpb, but it also increases total artifact size by 80,000 bytes. This remains a **non-record** package, so it does not count toward the S06 real-ablation ledger and should not be confused with the promoted legal-TTT submission evidence.
 
-That means `experiments/compare_random_map_runs.py` still reports a **fixture-backed** adapter-minus-baseline delta of `-0.0100`, but `experiments/audit_random_map_runtime_proof.py` now rejects the pair because those placeholder markers remain present. The size lines are still useful for contract verification (`artifact_bytes: 15600000` and `15680000` plus the future-required `Total submission size int6+lzma:` runtime line), but this folder is still **not real Linux/CUDA runtime proof** for promotion.
+## Keep / drop decision
 
-Interpretation for S05: **do not promote this technique from the evidence in this folder yet.** Re-run the exact commands above in the intended Linux/CUDA image with Flash Attention 3 available, overwrite these placeholder metric blocks with real run output, then compare the saved logs with `experiments/compare_random_map_runs.py`.
+**Decision: drop from the promoted submission path for now; keep as a reusable non-record experiment package.**
 
-## Promotion / failure criteria
+Why:
 
-Promote the technique to S05 consideration only if all of the following are true:
+1. The measured delta is modest (`-0.0100` bpb) relative to the already-promoted legal-TTT stack.
+2. The adapter increases artifact size from 15,600,000 to 15,680,000 bytes.
+3. The experiment is useful evidence for future reuse, but it is not part of the audited promoted submission package.
 
-1. Both logs exist at the exact paths above.
-2. Both logs parse through `experiments/compare_random_map_runs.py`.
-3. Both runs resolve to `chosen_metric: final_int6_sliding_window_s64`.
-4. The artifact remains under the non-record 16 MB budget.
-5. The signed delta is meaningfully negative or the README explains a rigorous negative result clearly enough for downstream reuse.
-
-If any of those fail, preserve the logs and record the result as incomplete or negative rather than rewriting history.
+If a future rerun on the intended Linux/CUDA host produces a materially better delta under the same fixed-path contract, update these same files in place and rerun the verifier/comparison/audit commands above.

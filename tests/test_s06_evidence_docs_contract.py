@@ -85,11 +85,14 @@ class S06EvidenceDocsContractTests(unittest.TestCase):
         self.assertIn("already-counted `legal_ttt_parallel_muon` family", promoted["Why excluded"])
         self.assertIn("2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train.log", promoted["Source"])
 
-        placeholder = by_artifact["Random-map adapter comparison"]
-        self.assertEqual(placeholder["Counts Toward 5+ Target"], "No")
-        self.assertIn("fixture-backed", placeholder["Why excluded"])
-        self.assertIn("not for satisfying the real historical ablation threshold", placeholder["Why excluded"])
-        self.assertIn("track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md", placeholder["Source"])
+        comparison = by_artifact["Random-map adapter comparison"]
+        self.assertEqual(comparison["Counts Toward 5+ Target"], "No")
+        self.assertEqual(comparison["Metric"], "`final_int6_sliding_window_s64`")
+        self.assertEqual(float(comparison["val_bpb"]), 1.1300)
+        self.assertEqual(int(comparison["Total Bytes"]), 15680000)
+        self.assertIn("adapter_minus_baseline_bpb_delta: -0.0100", comparison["Why excluded"])
+        self.assertIn("non-record experiment package", comparison["Why excluded"])
+        self.assertIn("track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md", comparison["Source"])
 
     def test_grant_application_records_submitted_status_without_dropping_rationale(self) -> None:
         grant = Path("GRANT_APPLICATION.md").read_text(encoding="utf-8")

@@ -51,6 +51,16 @@ REQUIRED_DOC_SNIPPETS: tuple[str, ...] = (
     "scp <remote-host>",
     "Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.",
 )
+EXPERIMENTS_DOC_SNIPPETS: tuple[str, ...] = (
+    "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md",
+    "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log",
+    "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
+    "final_int6_sliding_window_s64",
+    "1.1400",
+    "1.1300",
+    "-0.0100",
+    "non-record",
+)
 
 
 class RandomMapRuntimeAuditError(RuntimeError):
@@ -171,9 +181,9 @@ def run_audit(
     pair = audit_pair(baseline_log, adapter_log)
     docs: list[DocAudit] = []
     if readme is not None:
-        docs.append(audit_doc(readme))
+        docs.append(audit_doc(readme, REQUIRED_DOC_SNIPPETS))
     if experiments is not None:
-        docs.append(audit_doc(experiments))
+        docs.append(audit_doc(experiments, EXPERIMENTS_DOC_SNIPPETS))
     payload = RuntimeProofAudit(pair=pair, docs=tuple(docs))
     return asdict(payload)
 

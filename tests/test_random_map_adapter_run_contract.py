@@ -140,17 +140,19 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
     def test_docs_name_audit_command_and_placeholder_rejection_rule(self) -> None:
         for doc in (self.run_configs, self.runpod_guide, self.artifact_readme):
             self.assertIn("python experiments/audit_random_map_runtime_proof.py", doc)
-            self.assertRegex(doc, r"do not (accept|treat).*placeholder|rejects known placeholder")
+        self.assertIn("The audit rejects placeholder markers", self.artifact_readme)
+        self.assertIn("do not accept placeholder-backed proof", self.run_configs)
+        self.assertIn("leave the fixed evidence logs untouched rather than appending placeholder fixtures", self.runpod_guide)
 
-    def test_cli_audit_rejects_fixed_placeholder_logs(self) -> None:
+    def test_cli_audit_accepts_fixed_audited_logs(self) -> None:
         result = self.run_audit(
             "--baseline",
             "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log",
             "--adapter",
             "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
         )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("placeholder marker", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('"adapter_minus_baseline_bpb_delta": -0.01', result.stdout)
 
     def test_docs_only_name_supported_random_map_knobs(self) -> None:
         for knob in [
