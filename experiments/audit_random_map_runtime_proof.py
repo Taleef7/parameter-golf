@@ -45,6 +45,11 @@ REQUIRED_DOC_SNIPPETS: tuple[str, ...] = (
     "Total submission size int6+lzma:",
     "preserved_windows_host_note",
     "appended_contract_fixture",
+    "flash_attn_interface",
+    "RUNPOD_API_KEY",
+    "ssh <remote-host>",
+    "scp <remote-host>",
+    "Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.",
 )
 
 

@@ -130,6 +130,21 @@ python experiments/train_gpt_stack.py
 
 Use this section for the first adapter-vs-baseline comparison on top of the promoted S03 stack. The goal is one reproducible non-TTT A/B pair, not a free-form sweep.
 
+### Capability/auth gate before reruns
+
+Before overwriting `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log` or `.../random_map_adapter.log`, prove all of the following:
+
+1. A control path exists from this workspace:
+   - `runpodctl` is installed locally and `RUNPOD_API_KEY` is set, **or**
+   - an authenticated `ssh <remote-host>` / `scp <remote-host>` path already reaches the target Linux/CUDA repo checkout.
+2. The remote Linux/CUDA host satisfies the runtime contract:
+   - `python -c "import flash_attn_interface"` succeeds remotely.
+   - the dataset root and tokenizer path are readable remotely.
+   - the remote checkout can run `python experiments/verify_run.py --help`.
+
+Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
+If any prerequisite check fails, preserve that failure output separately and treat the rerun as blocked instead of appending placeholder content to the fixed evidence logs.
+
 ### Shared contract for both runs
 
 Keep these settings identical between baseline and adapter runs:
@@ -172,6 +187,44 @@ RUN_ID=s04_random_map_adapter \
 python experiments/train_gpt_random_map_adapter.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
 ```
+
+### Remote execution / copy-back form
+
+Run both commands from the same remote repo checkout and write directly to the fixed artifact paths there:
+
+```bash
+ssh <remote-host> 'cd /workspace/parameter-golf && \
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=0 \
+RUN_ID=s04_random_map_baseline \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log 2>&1'
+
+ssh <remote-host> 'cd /workspace/parameter-golf && \
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=1 \
+RANDOM_MAP_ADAPTER_RANK=8 \
+RANDOM_MAP_ADAPTER_LAYERS=9,10 \
+RANDOM_MAP_ADAPTER_TARGETS=q,v \
+RANDOM_MAP_ADAPTER_SEED=1729 \
+RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RUN_ID=s04_random_map_adapter \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1'
+
+scp <remote-host>:/workspace/parameter-golf/records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log
+scp <remote-host>:/workspace/parameter-golf/records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+```
+
+Only after the copy-back succeeds should you run the local verifier/comparison/audit commands against the fixed evidence pair.
 
 ### Verification / comparison
 

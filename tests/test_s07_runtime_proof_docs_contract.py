@@ -29,6 +29,14 @@ class RuntimeProofDocsContractTests(unittest.TestCase):
             self.assertIn("preserved_windows_host_note", doc)
             self.assertIn("appended_contract_fixture", doc)
 
+    def test_run_contract_docs_require_remote_capability_gate_before_reruns(self) -> None:
+        for doc in (self.run_configs, self.runpod_guide):
+            self.assertIn("flash_attn_interface", doc)
+            self.assertIn("RUNPOD_API_KEY", doc)
+            self.assertIn("ssh <remote-host>", doc)
+            self.assertIn("scp <remote-host>", doc)
+            self.assertIn("Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.", doc)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,10 @@ from pathlib import Path
 
 from experiments import audit_random_map_runtime_proof as audit
 
+ROOT = Path(__file__).resolve().parents[1]
+RUN_CONFIGS = ROOT / "experiments" / "run_configs.md"
+RUNPOD_GUIDE = ROOT / "experiments" / "runpod_guide.md"
+
 
 class RandomMapRuntimeProofContractTests(unittest.TestCase):
     def make_log(
@@ -138,6 +142,12 @@ class RandomMapRuntimeProofContractTests(unittest.TestCase):
             doc.write_text("python experiments/audit_random_map_runtime_proof.py\n", encoding="utf-8")
             with self.assertRaisesRegex(audit.RandomMapRuntimeAuditError, "doc contract drift"):
                 audit.audit_doc(doc)
+
+    def test_real_operator_docs_include_capability_gate_and_copy_back_contract(self) -> None:
+        for path in (RUN_CONFIGS, RUNPOD_GUIDE):
+            text = path.read_text(encoding="utf-8")
+            for snippet in audit.REQUIRED_DOC_SNIPPETS:
+                self.assertIn(snippet, text, f"missing {snippet!r} in {path}")
 
 
 if __name__ == "__main__":

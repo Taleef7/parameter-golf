@@ -151,6 +151,21 @@ If none of those appear, the verifier exits non-zero and prints a useful error n
 
 Use this when executing the first S04 comparison. The baseline and adapter runs must share the same non-TTT runtime contract so the only intentional delta is the adapter configuration.
 
+### Capability gate before any rerun
+
+Prove the remote execution path before you touch `baseline_no_adapter.log` or `random_map_adapter.log`.
+
+1. Prove the control path from this workspace:
+   - **RunPod CLI path:** `runpodctl` is installed locally and `RUNPOD_API_KEY` is present.
+   - **SSH path:** an authenticated `ssh <remote-host>` / `scp <remote-host>` route already reaches the Linux/CUDA workspace that will run the job.
+2. Prove the remote runtime prerequisites on the Linux/CUDA host before starting either run:
+   - `python -c "import flash_attn_interface"` succeeds.
+   - the dataset root and tokenizer path you will use are readable.
+   - `python experiments/verify_run.py --help` works from the remote repo checkout so the same verifier is available there.
+
+Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
+If any prerequisite check fails, stop at that failure boundary, preserve the failing command output separately, and leave the fixed evidence logs untouched rather than appending placeholder fixtures.
+
 ### Shared settings that must stay identical
 
 - `TTT_ENABLED=0`
@@ -193,6 +208,49 @@ python experiments/train_gpt_random_map_adapter.py \
 python experiments/verify_run.py \
   records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
+
+### Remote command form
+
+Run both jobs from the same remote repo checkout and write directly to the fixed artifact paths there.
+The command shape must stay the same even if the host name differs:
+
+```bash
+ssh <remote-host> 'cd /workspace/parameter-golf && \
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=0 \
+RUN_ID=s04_random_map_baseline \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log 2>&1'
+
+ssh <remote-host> 'cd /workspace/parameter-golf && \
+TTT_ENABLED=0 \
+EVAL_STRIDE=64 \
+ITERATIONS=9000 \
+MAX_WALLCLOCK_SECONDS=600 \
+RANDOM_MAP_ADAPTER_ENABLED=1 \
+RANDOM_MAP_ADAPTER_RANK=8 \
+RANDOM_MAP_ADAPTER_LAYERS=9,10 \
+RANDOM_MAP_ADAPTER_TARGETS=q,v \
+RANDOM_MAP_ADAPTER_SEED=1729 \
+RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RUN_ID=s04_random_map_adapter \
+python experiments/train_gpt_random_map_adapter.py \
+  > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1'
+```
+
+After the remote runs finish, copy the artifacts back onto the same local fixed paths before running the local verifier/audit commands:
+
+```bash
+scp <remote-host>:/workspace/parameter-golf/records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log
+scp <remote-host>:/workspace/parameter-golf/records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log \
+  records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+```
+
+Only after both copy-back steps succeed should you run `python experiments/verify_run.py`, `python experiments/compare_random_map_runs.py`, and `python experiments/audit_random_map_runtime_proof.py` locally against the fixed evidence pair.
 
 ### Comparison command
 
