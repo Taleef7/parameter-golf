@@ -14,5 +14,23 @@
     2025
   ],
   "train_log_alias": "train.log -> train_seed2025.log",
-  "blurb": "Promoted 2026-03-28 submission folder for the byte-identical 2026-03-23 Stack Integration + Legal TTT + Parallel Muon script. Audited inherited three-seed legal_ttt evidence: mean val_bpb 1.119367 (std 0.000464), conservative max total submission size 15990006 bytes under the 16,000,000-byte cap. The separate S04 random-map adapter folder remains non-record work and is not part of this submission evidence."
+  "launchability_contract": {
+    "world_size": 8,
+    "train_time_cap_ms": 600000,
+    "train_time_overshoot_tolerance_ms": 1000,
+    "max_train_time_ms": 600128,
+    "max_train_time_overshoot_ms": 128,
+    "eval_time_cap_ms": 600000,
+    "max_legal_ttt_eval_time_ms": 410268,
+    "max_non_ttt_eval_time_ms": 97749,
+    "non_ttt_metric": "final_int6_sliding_window",
+    "non_ttt_stride": 64,
+    "data_path_default": "./data/datasets/fineweb10B_sp1024",
+    "tokenizer_path_default": "./data/tokenizers/fineweb_1024_bpe.model",
+    "downloader_control": "data/cached_challenge_fineweb.py",
+    "no_network_proof": true,
+    "promoted_script_sha256": "df7aa00cc6a0c959fbc95f2665ec4ef6b7f869f05d20f4523510a1ad16f1e674",
+    "provenance_status": "byte-identical promoted/proven train_gpt.py"
+  },
+  "blurb": "Promoted 2026-03-28 submission folder for the byte-identical 2026-03-23 Stack Integration + Legal TTT + Parallel Muon script. Audited inherited three-seed legal_ttt evidence: mean val_bpb 1.119367 (std 0.000464), conservative max total submission size 15990006 bytes under the 16,000,000-byte cap. Launchability is closed via world_size:8, wallclock_cap with accepted 128 ms overshoot above 600000 ms, legal_ttt and non-TTT eval surfaces under the 600000 ms cap, local DATA_PATH/TOKENIZER_PATH defaults, and a script-specific no-network proof relative to data/cached_challenge_fineweb.py. The separate S04 random-map adapter folder remains non-record work and is not part of this submission evidence."
 }

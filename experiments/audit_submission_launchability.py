@@ -34,6 +34,8 @@ DEFAULT_SCRIPT = (
     / "2026-03-28_StackIntegration_LegalTTT_ParallelMuon"
     / "train_gpt.py"
 )
+DEFAULT_README = DEFAULT_SCRIPT.parent / "README.md"
+DEFAULT_SUBMISSION = DEFAULT_SCRIPT.parent / "submission.json"
 DEFAULT_LOGS = [
     ROOT
     / "records"
@@ -123,6 +125,15 @@ class LaunchabilityAggregate:
     max_train_time_overshoot_ms: int
     max_legal_ttt_eval_time_ms: int
     max_sliding_eval_time_ms: int
+
+
+@dataclass(frozen=True)
+class DocsContractAudit:
+    readme_path: str
+    submission_path: str
+    canonical_audit_command: str
+    readme_contract_verified: bool
+    submission_contract_verified: bool
 
 
 def _read_text(path: Path) -> str:
@@ -361,12 +372,164 @@ def summarize_launchability(seed_audits: list[LaunchabilitySeedAudit]) -> Launch
     )
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def build_canonical_audit_command(
+    *,
+    readme: Path,
+    submission: Path,
+    script: Path,
+    logs: list[Path] | tuple[Path, ...],
+) -> str:
+    log_args = " ".join(_display_path(path) for path in logs)
+    return (
+        "python experiments/audit_submission_launchability.py "
+        f"--readme {_display_path(readme)} "
+        f"--submission {_display_path(submission)} "
+        f"--script {_display_path(script)} "
+        f"--logs {log_args}"
+    )
+
+
+def expected_readme_snippets(
+    *,
+    aggregate: LaunchabilityAggregate,
+    package_payload: dict[str, object],
+    script_audit: ScriptLaunchabilityAudit,
+) -> list[str]:
+    package_aggregate = package_payload["aggregate"]
+    max_total_submission_bytes = int(package_aggregate["max_total_submission_bytes"])
+    return [
+        "inherited 3-seed reproducibility",
+        "- every audited seed log records `world_size:8`",
+        (
+            f"accepted post-step wallclock overshoot is `{aggregate.max_train_time_overshoot_ms} ms` "
+            f"above the `{aggregate.train_time_cap_ms} ms` cap"
+        ),
+        (
+            f"audited max `legal_ttt` eval time is `{aggregate.max_legal_ttt_eval_time_ms} ms` "
+            f"under the `{aggregate.eval_time_cap_ms} ms` cap"
+        ),
+        (
+            "audited non-TTT fallback surface is `final_int6_sliding_window` with `stride:64` "
+            "(future-compatible with `final_int6_sliding_window_s64`)"
+        ),
+        (
+            f"audited max non-TTT eval time is `{aggregate.max_sliding_eval_time_ms} ms` "
+            f"under the `{aggregate.eval_time_cap_ms} ms` cap"
+        ),
+        f"`DATA_PATH` default `{script_audit.data_path_default}`",
+        f"`TOKENIZER_PATH` default `{script_audit.tokenizer_path_default}`",
+        "Hugging Face download logic lives in `data/cached_challenge_fineweb.py`, not in the promoted submission script",
+        "no-network proof is script-specific",
+        "15,990,006 bytes",
+        "separate non-record package",
+        build_canonical_audit_command(
+            readme=DEFAULT_README,
+            submission=DEFAULT_SUBMISSION,
+            script=DEFAULT_SCRIPT,
+            logs=DEFAULT_LOGS,
+        ),
+    ]
+
+
+def validate_readme_contract(
+    readme_path: Path,
+    *,
+    aggregate: LaunchabilityAggregate,
+    package_payload: dict[str, object],
+    script_audit: ScriptLaunchabilityAudit,
+) -> None:
+    text = _read_text(readme_path)
+    for snippet in expected_readme_snippets(
+        aggregate=aggregate,
+        package_payload=package_payload,
+        script_audit=script_audit,
+    ):
+        if snippet not in text:
+            raise SubmissionLaunchabilityAuditError(
+                f"README launchability contract missing snippet in {readme_path}: {snippet}"
+            )
+    if "no network access occurs anywhere" in text.lower():
+        raise SubmissionLaunchabilityAuditError(
+            f"README claims stronger network isolation than the audit can prove: {readme_path}"
+        )
+
+
+def validate_submission_contract(
+    submission_path: Path,
+    *,
+    aggregate: LaunchabilityAggregate,
+    package_payload: dict[str, object],
+    script_audit: ScriptLaunchabilityAudit,
+) -> None:
+    metadata = json.loads(_read_text(submission_path))
+    package_aggregate = package_payload["aggregate"]
+    provenance = package_payload["provenance"]
+    launchability = metadata.get("launchability_contract")
+    if not isinstance(launchability, dict):
+        raise SubmissionLaunchabilityAuditError(
+            f"submission metadata missing launchability_contract object: {submission_path}"
+        )
+
+    expected_pairs = {
+        "seed_count": aggregate.seed_count,
+        "seeds": [1337, 42, 2025],
+        "bytes_total": int(package_aggregate["max_total_submission_bytes"]),
+        "val_bpb": float(package_aggregate["mean_val_bpb"]),
+        "val_bpb_std": float(package_aggregate["std_val_bpb"]),
+    }
+    for key, expected in expected_pairs.items():
+        actual = metadata.get(key)
+        if isinstance(expected, float):
+            if abs(float(actual) - expected) > 1e-12:
+                raise SubmissionLaunchabilityAuditError(
+                    f"submission metadata drift for {key} in {submission_path}: {actual} != {expected}"
+                )
+        elif actual != expected:
+            raise SubmissionLaunchabilityAuditError(
+                f"submission metadata drift for {key} in {submission_path}: {actual} != {expected}"
+            )
+
+    launchability_expected = {
+        "world_size": aggregate.expected_world_size,
+        "train_time_cap_ms": aggregate.train_time_cap_ms,
+        "train_time_overshoot_tolerance_ms": aggregate.train_time_overshoot_tolerance_ms,
+        "max_train_time_ms": aggregate.max_train_time_ms,
+        "max_train_time_overshoot_ms": aggregate.max_train_time_overshoot_ms,
+        "eval_time_cap_ms": aggregate.eval_time_cap_ms,
+        "max_legal_ttt_eval_time_ms": aggregate.max_legal_ttt_eval_time_ms,
+        "max_non_ttt_eval_time_ms": aggregate.max_sliding_eval_time_ms,
+        "non_ttt_metric": "final_int6_sliding_window",
+        "non_ttt_stride": 64,
+        "data_path_default": script_audit.data_path_default,
+        "tokenizer_path_default": script_audit.tokenizer_path_default,
+        "downloader_control": "data/cached_challenge_fineweb.py",
+        "no_network_proof": True,
+        "promoted_script_sha256": provenance["promoted_sha256"],
+        "provenance_status": "byte-identical promoted/proven train_gpt.py",
+    }
+    for key, expected in launchability_expected.items():
+        actual = launchability.get(key)
+        if actual != expected:
+            raise SubmissionLaunchabilityAuditError(
+                f"submission launchability drift for {key} in {submission_path}: {actual} != {expected}"
+            )
+
+
 def run_audit(
     *,
     script: Path = DEFAULT_SCRIPT,
     logs: list[Path] | tuple[Path, ...] = tuple(DEFAULT_LOGS),
     proven_script: Path = package_audit.DEFAULT_PROVEN_SCRIPT,
     downloader_control: Path = DEFAULT_DOWNLOADER_SCRIPT,
+    readme: Path | None = None,
+    submission: Path | None = None,
 ) -> dict[str, object]:
     package_payload = package_audit.run_audit(
         list(logs),
@@ -390,12 +553,44 @@ def run_audit(
         for log_path, seed_payload in zip(logs, package_seed_audits)
     ]
     aggregate = summarize_launchability(seed_audits)
-    return {
+    payload = {
         "package_audit": package_payload,
         "script_launchability": asdict(script_audit),
         "seed_launchability": [asdict(seed) for seed in seed_audits],
         "launchability_aggregate": asdict(aggregate),
     }
+    if readme is not None or submission is not None:
+        if readme is None or submission is None:
+            raise SubmissionLaunchabilityAuditError(
+                "readme and submission must be provided together when validating reviewer docs"
+            )
+        validate_readme_contract(
+            readme,
+            aggregate=aggregate,
+            package_payload=package_payload,
+            script_audit=script_audit,
+        )
+        validate_submission_contract(
+            submission,
+            aggregate=aggregate,
+            package_payload=package_payload,
+            script_audit=script_audit,
+        )
+        payload["docs_contract"] = asdict(
+            DocsContractAudit(
+                readme_path=readme.as_posix(),
+                submission_path=submission.as_posix(),
+                canonical_audit_command=build_canonical_audit_command(
+                    readme=readme,
+                    submission=submission,
+                    script=script,
+                    logs=logs,
+                ),
+                readme_contract_verified=True,
+                submission_contract_verified=True,
+            )
+        )
+    return payload
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -412,6 +607,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_LOGS,
         help="Seed logs to audit.",
+    )
+    parser.add_argument(
+        "--readme",
+        type=Path,
+        default=None,
+        help="Optional README.md to validate against the audited launchability contract.",
+    )
+    parser.add_argument(
+        "--submission",
+        type=Path,
+        default=None,
+        help="Optional submission.json to validate against the audited launchability contract.",
     )
     parser.add_argument(
         "--proven-script",
@@ -437,6 +644,8 @@ def main() -> int:
             logs=args.logs,
             proven_script=args.proven_script,
             downloader_control=args.downloader_control,
+            readme=args.readme,
+            submission=args.submission,
         )
     except (FileNotFoundError, ValueError, package_audit.SubmissionAuditError, SubmissionLaunchabilityAuditError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

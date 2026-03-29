@@ -15,7 +15,7 @@ This folder packages the promoted 2026-03-28 submission artifact as a self-conta
 
 ## Inherited 3-seed evidence
 
-The three logs in this folder were copied from `records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/` after `experiments/audit_submission_package.py` confirmed that:
+This promoted record folder closes launchability from inherited 3-seed reproducibility rather than a fresh retrain. The three logs in this folder were copied from `records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/` after `experiments/audit_submission_package.py` confirmed that:
 
 1. each log resolves to `chosen_metric: legal_ttt`
 2. the promoted 2026-03-28 `train_gpt.py` matches the proven 2026-03-23 `train_gpt.py` byte-for-byte
@@ -38,6 +38,21 @@ This folder intentionally carries the copied per-seed evidence plus one reviewer
 - `train.log` - reviewer-friendly alias for `train_seed2025.log`; these two files are byte-identical and share sha256 `408f9895815ad8f2317aa42a14b4b1953df9828a480d1bd572b630d487c8f3ff`
 
 A reviewer who reads only `train.log` still sees a real accepted proof log. A reviewer who reads all three `train_seed*.log` files gets the full inherited evidence behind the mean/std summary.
+
+## Launchability closure
+
+`experiments/audit_submission_launchability.py` is the canonical mechanical proof that this promoted folder is still launchable from the existing evidence surface.
+
+- inherited 3-seed reproducibility is preserved because all three copied logs remain valid for the byte-identical promoted script
+- every audited seed log records `world_size:8`
+- the accepted post-step wallclock overshoot is `128 ms` above the `600000 ms` cap because the inherited logs stop on `stopping_early: wallclock_cap` after a final step completes
+- audited max `legal_ttt` eval time is `410268 ms` under the `600000 ms` cap
+- audited non-TTT fallback surface is `final_int6_sliding_window` with `stride:64` (future-compatible with `final_int6_sliding_window_s64`)
+- audited max non-TTT eval time is `97749 ms` under the `600000 ms` cap
+- the promoted script keeps `DATA_PATH` default `./data/datasets/fineweb10B_sp1024`
+- the promoted script keeps `TOKENIZER_PATH` default `./data/tokenizers/fineweb_1024_bpe.model`
+- Hugging Face download logic lives in `data/cached_challenge_fineweb.py`, not in the promoted submission script
+- the no-network proof is script-specific: the promoted `train_gpt.py` exposes local-only dataset/tokenizer defaults and no supported network imports, while `data/cached_challenge_fineweb.py` is the explicit downloader control surface
 
 ## Exact run contract
 
@@ -71,8 +86,15 @@ The promoted script also supports the non-TTT fallback path `TTT_ENABLED=0`, in 
 - the audited `val_bpb` standard deviation
 - the conservative max `bytes_total` across the three copied seed logs
 - the current `train_gpt.py` code size for the promoted artifact
+- a `launchability_contract` object that mirrors the audited `world_size:8`, wallclock cap, eval-cap, local path, no-network, and provenance surfaces
 
-To regenerate the package summary mechanically, rerun:
+To regenerate the full reviewer-visible contract mechanically, rerun from the repository root:
+
+```bash
+python experiments/audit_submission_launchability.py --readme records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/README.md --submission records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/submission.json --script records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_gpt.py --logs records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed1337.log records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed42.log records/track_10min_16mb/2026-03-28_StackIntegration_LegalTTT_ParallelMuon/train_seed2025.log
+```
+
+For the narrower package-only summary, rerun:
 
 ```bash
 python experiments/audit_submission_package.py \
