@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
+import torch
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "experiments" / "train_gpt_random_map_adapter.py"
 VERIFY_RUN = ROOT / "experiments" / "verify_run.py"
@@ -44,9 +46,13 @@ class RandomMapAdapterContractTests(unittest.TestCase):
             "RANDOM_MAP_ADAPTER_TARGETS",
             "RANDOM_MAP_ADAPTER_SEED",
             "RANDOM_MAP_ADAPTER_SCALE_INIT",
+            "RANDOM_MAP_ADAPTER_GATE_ENABLED",
+            "RANDOM_MAP_ADAPTER_GATE_INIT",
             "random_map_adapter:",
             "random_map_adapter_params:",
             "random_map_buffer_params:",
+            "gate_enabled=",
+            "gate_init=",
         ]:
             self.assertIn(token, self.source)
 
@@ -58,6 +64,8 @@ class RandomMapAdapterContractTests(unittest.TestCase):
             random_map_adapter_targets="q,v",
             random_map_adapter_seed=1729,
             random_map_adapter_scale_init=0.0,
+            random_map_adapter_gate_enabled=False,
+            random_map_adapter_gate_init=1.0,
             num_layers=4,
         )
         config = self.module.build_random_map_adapter_config(args)
@@ -65,6 +73,8 @@ class RandomMapAdapterContractTests(unittest.TestCase):
         self.assertEqual(config.rank, 0)
         self.assertEqual(config.layer_indices, ())
         self.assertEqual(config.targets, ())
+        self.assertFalse(config.gate_enabled)
+        self.assertEqual(config.gate_init, 1.0)
 
     def test_malformed_config_is_rejected_loudly(self) -> None:
         base = dict(
@@ -74,6 +84,8 @@ class RandomMapAdapterContractTests(unittest.TestCase):
             random_map_adapter_targets="q,v",
             random_map_adapter_seed=1729,
             random_map_adapter_scale_init=0.0,
+            random_map_adapter_gate_enabled=True,
+            random_map_adapter_gate_init=1.0,
             num_layers=4,
         )
         with self.assertRaisesRegex(ValueError, "RANDOM_MAP_ADAPTER_RANK"):
@@ -93,6 +105,8 @@ class RandomMapAdapterContractTests(unittest.TestCase):
             targets=("q", "v") if enabled else (),
             seed=17,
             scale_init=0.0,
+            gate_enabled=enabled,
+            gate_init=1.0,
         )
         return self.module.GPT(
             vocab_size=64,
@@ -133,6 +147,8 @@ class RandomMapAdapterContractTests(unittest.TestCase):
         self.assertIn("blocks.0.attn.q_adapter.up_proj.weight", param_names)
         self.assertIn("blocks.0.attn.v_adapter.up_proj.weight", param_names)
         self.assertIn("blocks.0.attn.q_adapter.scale", param_names)
+        self.assertIn("blocks.0.attn.q_adapter.gate", param_names)
+        self.assertIn("blocks.0.attn.v_adapter.gate", param_names)
         self.assertGreater(model.random_map_adapter_parameter_count, 0)
         self.assertGreater(model.random_map_adapter_buffer_count, 0)
 
@@ -142,6 +158,26 @@ class RandomMapAdapterContractTests(unittest.TestCase):
         self.assertEqual(model.random_map_adapter_buffer_count, 0)
         self.assertFalse(any(name.endswith(".random_map") for name, _ in model.named_buffers()))
         self.assertFalse(any(".q_adapter." in name or ".v_adapter." in name for name, _ in model.named_parameters()))
+
+    def test_adapter_gate_is_identity_when_enabled_with_unit_init(self) -> None:
+        adapter = self.module.RandomLinearMapAdapter(
+            input_dim=4,
+            output_dim=4,
+            rank=2,
+            seed=17,
+            scale_init=1.0,
+            gate_enabled=True,
+            gate_init=1.0,
+        )
+        with torch.no_grad():
+            adapter.up_proj.weight.zero_()
+            adapter.up_proj.weight[0, 0] = 1.0
+            adapter.up_proj.weight[1, 1] = 1.0
+        x = torch.randn(2, 3, 4)
+        projected = self.module.F.linear(x, adapter.random_map.to(dtype=x.dtype))
+        ungated = adapter.up_proj(projected) * adapter.scale.to(dtype=x.dtype)
+        gated = adapter(x)
+        self.assertTrue(torch.allclose(gated, ungated, atol=1e-5, rtol=1e-5))
 
     def test_source_routes_adapter_parameters_through_replicated_adamw_path(self) -> None:
         self.assertIn('adapter_params = [', self.source)

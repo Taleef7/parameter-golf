@@ -128,7 +128,8 @@ python experiments/train_gpt_stack.py
 
 ## S04 random-map-adapter comparison protocol (non-TTT)
 
-Use this section for the first adapter-vs-baseline comparison on top of the promoted S03 stack. The goal is one reproducible non-TTT A/B pair, not a free-form sweep.
+Use this section for the fork-specific adapter-vs-baseline closeout on top of the promoted S03 stack. The goal is one reproducible non-TTT A/B pair, not a free-form sweep.
+The current fork extension adds an optional learned multiplicative gate on top of the frozen random-map adapter path. That gate stays off by default so the existing ungated behavior remains available.
 
 ### Capability/auth gate before reruns
 
@@ -156,6 +157,7 @@ Keep these settings identical between baseline and adapter runs:
 - identical dataset/tokenizer paths, seed, and remaining stack knobs
 
 Both logs must resolve to `chosen_metric: final_int6_sliding_window_s64`. If either log resolves to `legal_ttt` or any fallback other than `final_int6_sliding_window_s64`, do not compare them.
+The closeout rerun target uses `RANDOM_MAP_ADAPTER_GATE_ENABLED=1` with `RANDOM_MAP_ADAPTER_GATE_INIT=1.0`. If those gate vars are absent or disabled, you are reproducing the older ungated adapter path instead of the final fork-owned extension.
 
 ### Baseline run (adapter off)
 
@@ -183,6 +185,8 @@ RANDOM_MAP_ADAPTER_LAYERS=9,10 \
 RANDOM_MAP_ADAPTER_TARGETS=q,v \
 RANDOM_MAP_ADAPTER_SEED=1729 \
 RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RANDOM_MAP_ADAPTER_GATE_ENABLED=1 \
+RANDOM_MAP_ADAPTER_GATE_INIT=1.0 \
 RUN_ID=s04_random_map_adapter \
 python experiments/train_gpt_random_map_adapter.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
@@ -214,6 +218,8 @@ RANDOM_MAP_ADAPTER_LAYERS=9,10 \
 RANDOM_MAP_ADAPTER_TARGETS=q,v \
 RANDOM_MAP_ADAPTER_SEED=1729 \
 RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RANDOM_MAP_ADAPTER_GATE_ENABLED=1 \
+RANDOM_MAP_ADAPTER_GATE_INIT=1.0 \
 RUN_ID=s04_random_map_adapter \
 python experiments/train_gpt_random_map_adapter.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1'
@@ -241,6 +247,8 @@ python experiments/audit_random_map_runtime_proof.py \
 The comparison helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT `final_int6_sliding_window_s64` contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
 
 The audit helper is stricter: do not accept placeholder-backed proof. It rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header; it also requires each saved log to contain the expected `random_map_adapter:enabled=...` config line, a `final_int6_sliding_window_s64` runtime line, and a `Total submission size int6+lzma:` line.
+
+As of the current closeout snapshot, the committed fixed logs in `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/` are still the last audited ungated pair. Keep them untouched until the learned-gate rerun is executed on a proven Linux/CUDA host.
 
 ## Notes for future updates
 

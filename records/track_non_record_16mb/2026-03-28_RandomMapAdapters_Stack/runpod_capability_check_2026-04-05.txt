@@ -1,0 +1,17 @@
+RunPod / remote capability check recorded from the local Windows workspace on 2026-04-05.
+
+Local control-path checks:
+
+- runpodctl:missing
+- RUNPOD_API_KEY:missing
+- ssh:C:\Windows\System32\OpenSSH\ssh.exe
+
+Interpretation:
+
+- The local machine does not currently have the RunPod CLI installed.
+- No RunPod API key is present in the environment.
+- An SSH client exists locally, but no authenticated remote host route was proven from this workspace.
+
+Result:
+
+The learned-gate random-map adapter rerun remains blocked at the control-path gate. Preserve the committed fixed evidence logs until a Linux/CUDA host is proven reachable and can satisfy the remote runtime checks described in the package README and run guides.

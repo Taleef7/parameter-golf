@@ -97,6 +97,8 @@ class Hyperparameters:
     random_map_adapter_targets = os.environ.get("RANDOM_MAP_ADAPTER_TARGETS", "q,v")
     random_map_adapter_seed = int(os.environ.get("RANDOM_MAP_ADAPTER_SEED", 1729))
     random_map_adapter_scale_init = float(os.environ.get("RANDOM_MAP_ADAPTER_SCALE_INIT", "0.0"))
+    random_map_adapter_gate_enabled = bool(int(os.environ.get("RANDOM_MAP_ADAPTER_GATE_ENABLED", "0")))
+    random_map_adapter_gate_init = float(os.environ.get("RANDOM_MAP_ADAPTER_GATE_INIT", "1.0"))
     ttt_enabled = bool(int(os.environ.get("TTT_ENABLED", "0")))
     ttt_lr = float(os.environ.get("TTT_LR", 0.002))
     ttt_epochs = int(os.environ.get("TTT_EPOCHS", 3))
@@ -117,6 +119,8 @@ class RandomMapAdapterConfig:
     targets: tuple[str, ...]
     seed: int
     scale_init: float
+    gate_enabled: bool
+    gate_init: float
 
 
 def parse_random_map_adapter_layers(spec: str, num_layers: int) -> tuple[int, ...]:
@@ -168,6 +172,8 @@ def build_random_map_adapter_config(args: Hyperparameters) -> RandomMapAdapterCo
             targets=(),
             seed=args.random_map_adapter_seed,
             scale_init=args.random_map_adapter_scale_init,
+            gate_enabled=False,
+            gate_init=args.random_map_adapter_gate_init,
         )
     if args.random_map_adapter_rank <= 0:
         raise ValueError(
@@ -184,6 +190,8 @@ def build_random_map_adapter_config(args: Hyperparameters) -> RandomMapAdapterCo
         targets=targets,
         seed=args.random_map_adapter_seed,
         scale_init=args.random_map_adapter_scale_init,
+        gate_enabled=args.random_map_adapter_gate_enabled,
+        gate_init=args.random_map_adapter_gate_init,
     )
 
 # --- Batched Newton-Schulz orthogonalization ---
@@ -700,6 +708,8 @@ class CausalSelfAttention(nn.Module):
         random_map_rank: int = 0,
         random_map_seed: int = 0,
         random_map_scale_init: float = 0.0,
+        random_map_gate_enabled: bool = False,
+        random_map_gate_init: float = 1.0,
     ):
         super().__init__()
         if dim % num_heads != 0:
@@ -727,12 +737,28 @@ class CausalSelfAttention(nn.Module):
             self.vr_lambda = nn.Parameter(torch.tensor([0.5, 0.5], dtype=torch.float32))
         self.random_map_targets = tuple(random_map_targets)
         self.q_adapter = (
-            RandomLinearMapAdapter(dim, dim, random_map_rank, random_map_seed + 11, random_map_scale_init)
+            RandomLinearMapAdapter(
+                dim,
+                dim,
+                random_map_rank,
+                random_map_seed + 11,
+                random_map_scale_init,
+                gate_enabled=random_map_gate_enabled,
+                gate_init=random_map_gate_init,
+            )
             if "q" in self.random_map_targets
             else None
         )
         self.v_adapter = (
-            RandomLinearMapAdapter(dim, num_kv_heads * self.head_dim, random_map_rank, random_map_seed + 29, random_map_scale_init)
+            RandomLinearMapAdapter(
+                dim,
+                num_kv_heads * self.head_dim,
+                random_map_rank,
+                random_map_seed + 29,
+                random_map_scale_init,
+                gate_enabled=random_map_gate_enabled,
+                gate_init=random_map_gate_init,
+            )
             if "v" in self.random_map_targets
             else None
         )
@@ -829,7 +855,16 @@ class ValueEmbedding(nn.Module):
         return h * self.scale.to(dtype=h.dtype)
 
 class RandomLinearMapAdapter(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, rank: int, seed: int, scale_init: float):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        rank: int,
+        seed: int,
+        scale_init: float,
+        gate_enabled: bool = False,
+        gate_init: float = 1.0,
+    ):
         super().__init__()
         if rank <= 0:
             raise ValueError(f"random-map adapter rank must be positive, got {rank}")
@@ -840,11 +875,15 @@ class RandomLinearMapAdapter(nn.Module):
         self.up_proj = nn.Linear(rank, output_dim, bias=False)
         nn.init.zeros_(self.up_proj.weight)
         self.scale = nn.Parameter(torch.tensor(scale_init, dtype=torch.float32))
+        self.gate = nn.Parameter(torch.tensor(gate_init, dtype=torch.float32)) if gate_enabled else None
 
     def forward(self, x: Tensor) -> Tensor:
         projected = F.linear(x, self.random_map.to(dtype=x.dtype))
         delta = self.up_proj(projected)
-        return delta * self.scale.to(dtype=delta.dtype)
+        scaled = delta * self.scale.to(dtype=delta.dtype)
+        if self.gate is not None:
+            scaled = scaled * self.gate.to(dtype=delta.dtype)
+        return scaled
 
 class MLP(nn.Module):
     def __init__(self, dim: int, mlp_mult: int):
@@ -872,6 +911,8 @@ class Block(nn.Module):
         random_map_rank: int = 0,
         random_map_seed: int = 0,
         random_map_scale_init: float = 0.0,
+        random_map_gate_enabled: bool = False,
+        random_map_gate_init: float = 1.0,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
@@ -888,6 +929,8 @@ class Block(nn.Module):
             random_map_rank=random_map_rank,
             random_map_seed=random_map_seed,
             random_map_scale_init=random_map_scale_init,
+            random_map_gate_enabled=random_map_gate_enabled,
+            random_map_gate_init=random_map_gate_init,
         )
         self.mlp = MLP(dim, mlp_mult)
         self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
@@ -951,7 +994,7 @@ class GPT(nn.Module):
         self.mtp_num_heads = mtp_num_heads
         self.mtp_loss_weight = mtp_loss_weight
         self.random_map_adapter_config = random_map_adapter_config or RandomMapAdapterConfig(
-            enabled=False, rank=0, layer_indices=(), targets=(), seed=0, scale_init=0.0
+            enabled=False, rank=0, layer_indices=(), targets=(), seed=0, scale_init=0.0, gate_enabled=False, gate_init=1.0
         )
         self.random_map_adapter_layers = self.random_map_adapter_config.layer_indices
         self.random_map_adapter_targets = self.random_map_adapter_config.targets
@@ -990,6 +1033,8 @@ class GPT(nn.Module):
                     random_map_rank=self.random_map_adapter_config.rank if i in adapter_layer_set else 0,
                     random_map_seed=self.random_map_adapter_config.seed + (i * 997),
                     random_map_scale_init=self.random_map_adapter_config.scale_init,
+                    random_map_gate_enabled=self.random_map_adapter_config.gate_enabled if i in adapter_layer_set else False,
+                    random_map_gate_init=self.random_map_adapter_config.gate_init,
                 )
                 for i in range(num_layers)
             ]
@@ -1746,7 +1791,8 @@ def main() -> None:
     log0(
         f"random_map_adapter:enabled={random_map_adapter_config.enabled} rank={random_map_adapter_config.rank} "
         f"layers={list(random_map_adapter_config.layer_indices)} targets={list(random_map_adapter_config.targets)} "
-        f"seed={random_map_adapter_config.seed} scale_init={random_map_adapter_config.scale_init:.4f}"
+        f"seed={random_map_adapter_config.seed} scale_init={random_map_adapter_config.scale_init:.4f} "
+        f"gate_enabled={random_map_adapter_config.gate_enabled} gate_init={random_map_adapter_config.gate_init:.4f}"
     )
     log0(
         f"random_map_adapter_params:{base_model.random_map_adapter_parameter_count} "

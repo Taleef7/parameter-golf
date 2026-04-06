@@ -149,7 +149,8 @@ If none of those appear, the verifier exits non-zero and prints a useful error n
 
 ## 5. S04 random-map-adapter runbook (Linux/CUDA, non-TTT only)
 
-Use this when executing the first S04 comparison. The baseline and adapter runs must share the same non-TTT runtime contract so the only intentional delta is the adapter configuration.
+Use this when executing the fork-specific S04 closeout comparison. The baseline and adapter runs must share the same non-TTT runtime contract so the only intentional delta is the adapter configuration.
+The final fork-owned extension is a learned multiplicative gate on top of the frozen random-map adapter. Leave the gate disabled for the baseline and enable it for the adapter rerun.
 
 ### Capability gate before any rerun
 
@@ -173,6 +174,11 @@ If any prerequisite check fails, stop at that failure boundary, preserve the fai
 - `ITERATIONS=9000`
 - `MAX_WALLCLOCK_SECONDS=600`
 - same dataset/tokenizer paths, seed, and remaining stack knobs
+
+Closeout-specific adapter settings:
+
+- `RANDOM_MAP_ADAPTER_GATE_ENABLED=1`
+- `RANDOM_MAP_ADAPTER_GATE_INIT=1.0`
 
 ### Baseline command
 
@@ -202,6 +208,8 @@ RANDOM_MAP_ADAPTER_LAYERS=9,10 \
 RANDOM_MAP_ADAPTER_TARGETS=q,v \
 RANDOM_MAP_ADAPTER_SEED=1729 \
 RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RANDOM_MAP_ADAPTER_GATE_ENABLED=1 \
+RANDOM_MAP_ADAPTER_GATE_INIT=1.0 \
 RUN_ID=s04_random_map_adapter \
 python experiments/train_gpt_random_map_adapter.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
@@ -236,6 +244,8 @@ RANDOM_MAP_ADAPTER_LAYERS=9,10 \
 RANDOM_MAP_ADAPTER_TARGETS=q,v \
 RANDOM_MAP_ADAPTER_SEED=1729 \
 RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RANDOM_MAP_ADAPTER_GATE_ENABLED=1 \
+RANDOM_MAP_ADAPTER_GATE_INIT=1.0 \
 RUN_ID=s04_random_map_adapter \
 python experiments/train_gpt_random_map_adapter.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1'
@@ -271,6 +281,8 @@ Expected comparison behavior:
 - the helper prints `adapter_minus_baseline_bpb_delta: +/-0.xxxx`
 - do not accept placeholder-backed proof: the audit rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header
 - the audit also requires the baseline/adaptor `random_map_adapter:enabled=...` config lines plus `Total submission size int6+lzma:` in each saved log
+
+The committed fixed-path logs remain the last audited ungated evidence pair until a Linux/CUDA rerun proves the learned-gate variant. Do not overwrite them from Windows or with placeholder content.
 
 ## 6. Troubleshooting
 

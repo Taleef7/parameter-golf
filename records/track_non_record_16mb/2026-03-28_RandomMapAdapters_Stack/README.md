@@ -1,10 +1,12 @@
 # Random Map Adapters on the S03 Stack (Non-Record Package)
 
 This folder packages the S04 random-linear-map adapter experiment on top of the promoted S03 non-TTT stack. It is a fixed-path, mechanically auditable A/B comparison surface for the adapter-on vs adapter-off question.
+The final fork-owned extension adds an optional learned multiplicative gate to the adapter path while keeping the random projection matrix frozen.
 
 ## Technique summary
 
 `train_gpt.py` is a copy of `experiments/train_gpt_random_map_adapter.py`. The novelty seam stays narrow: only Q/V projections in selected layers receive learned deltas, while each adapter's random projection matrix stays frozen as a registered buffer.
+The fork-specific closeout extension is `RANDOM_MAP_ADAPTER_GATE_ENABLED=1`, which multiplies the learned adapter output by a small learned scalar gate per adapted projection. When the gate is disabled, behavior matches the earlier ungated adapter path.
 
 ## Stable artifact paths
 
@@ -27,6 +29,7 @@ Before overwriting `baseline_no_adapter.log` or `random_map_adapter.log`, prove 
 
 Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
 If any prerequisite fails, preserve that failure separately instead of inserting `preserved_windows_host_note` or `appended_contract_fixture` markers into the fixed evidence logs.
+The current local control-path result is recorded separately in `runpod_capability_check_2026-04-05.txt`.
 
 ## Comparison contract
 
@@ -39,6 +42,10 @@ Both runs keep these shared settings identical:
 - identical dataset/tokenizer paths, seed, and remaining stack knobs
 
 The accepted metric for this comparison is `final_int6_sliding_window_s64`. Each log must also contain `Total submission size int6+lzma:`.
+The final closeout rerun target also enables:
+
+- `RANDOM_MAP_ADAPTER_GATE_ENABLED=1`
+- `RANDOM_MAP_ADAPTER_GATE_INIT=1.0`
 
 ## Exact proof commands
 
@@ -70,6 +77,8 @@ RANDOM_MAP_ADAPTER_LAYERS=9,10 \
 RANDOM_MAP_ADAPTER_TARGETS=q,v \
 RANDOM_MAP_ADAPTER_SEED=1729 \
 RANDOM_MAP_ADAPTER_SCALE_INIT=0.01 \
+RANDOM_MAP_ADAPTER_GATE_ENABLED=1 \
+RANDOM_MAP_ADAPTER_GATE_INIT=1.0 \
 RUN_ID=s04_random_map_adapter \
 python records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/train_gpt.py \
   > records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log 2>&1
@@ -93,13 +102,15 @@ The audit rejects placeholder markers such as `preserved_windows_host_note`, `ap
 
 ## Current fixed-path evidence summary
 
-The saved evidence pair currently audits cleanly through the local verifier/comparison/audit stack:
+The saved evidence pair currently audits cleanly through the local verifier/comparison/audit stack.
+Those logs predate the learned-gate extension, so they remain the last audited ungated pair until a Linux/CUDA rerun proves the new gate-enabled variant:
 
 - `baseline_no_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1400`, `Total submission size int6+lzma: 15600000 bytes`
 - `random_map_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1300`, `Total submission size int6+lzma: 15680000 bytes`
 - `adapter_minus_baseline_bpb_delta: -0.0100`
 
-Interpretation: the adapter improves `final_int6_sliding_window_s64` by 0.0100 bpb, but it also increases total artifact size by 80,000 bytes. This remains a **non-record** package, so it does not count toward the S06 real-ablation ledger and should not be confused with the promoted legal-TTT submission evidence.
+Interpretation: the ungated adapter improves `final_int6_sliding_window_s64` by 0.0100 bpb, but it also increases total artifact size by 80,000 bytes. This remains a **non-record** package, so it does not count toward the S06 real-ablation ledger and should not be confused with the promoted legal-TTT submission evidence.
+The learned-gate variant is implemented in `train_gpt.py`, but it still needs a clean Linux/CUDA rerun before these fixed logs can be replaced.
 
 ## Keep / drop decision
 

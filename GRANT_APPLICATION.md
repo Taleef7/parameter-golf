@@ -4,6 +4,7 @@
 
 - **Status:** Submitted
 - **Recorded for S06:** This repository now treats the compute-grant application as a submitted artifact, not a planned draft. The requested-compute narrative below is preserved as the original application text.
+- **Historical framing note:** The competitive score ranges in the original application text are historical to the submission date and should not be read as current leaderboard state.
 
 ## Project Description
 

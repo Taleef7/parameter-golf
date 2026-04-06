@@ -130,6 +130,8 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.assertIn("RANDOM_MAP_ADAPTER_RANK=8", doc)
             self.assertIn("RANDOM_MAP_ADAPTER_LAYERS=9,10", doc)
             self.assertIn("RANDOM_MAP_ADAPTER_TARGETS=q,v", doc)
+            self.assertIn("RANDOM_MAP_ADAPTER_GATE_ENABLED=1", doc)
+            self.assertIn("RANDOM_MAP_ADAPTER_GATE_INIT=1.0", doc)
             self.assertIn("baseline_no_adapter.log", doc)
             self.assertIn("random_map_adapter.log", doc)
             self.assertIn("final_int6_sliding_window_s64", doc)
@@ -162,6 +164,8 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             "RANDOM_MAP_ADAPTER_TARGETS",
             "RANDOM_MAP_ADAPTER_SEED",
             "RANDOM_MAP_ADAPTER_SCALE_INIT",
+            "RANDOM_MAP_ADAPTER_GATE_ENABLED",
+            "RANDOM_MAP_ADAPTER_GATE_INIT",
             "TTT_ENABLED",
             "EVAL_STRIDE",
             "ITERATIONS",

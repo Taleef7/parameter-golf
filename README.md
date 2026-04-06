@@ -26,6 +26,15 @@ The challenge runs from March 18th to April 30th.
 
 Happy training!
 
+## Fork Status
+
+This repository now has a fork-specific closeout surface in addition to the upstream challenge docs.
+
+- [`PROJECT_STATUS.md`](PROJECT_STATUS.md) explains what this fork is, what is inherited packaging versus original fork work, what is complete, and what is still blocked.
+- `python experiments/check_local_environment.py` verifies the local Python environment can run the fork's verification workflow.
+- `python experiments/check_snapshot_parity.py` verifies the canonical `experiments/` sources still match the committed snapshot scripts in `records/`.
+- `python -m pytest -q` is the canonical local verification command once `requirements-dev.txt` is installed into the project venv.
+
 ## Leaderboard
 
 | Run | Score | Author | Summary | Date | Info |
