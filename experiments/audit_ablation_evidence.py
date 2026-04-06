@@ -23,10 +23,11 @@ ACCEPTED_METRICS: tuple[str, ...] = (
     "final_int6_sliding_window_s64",
     "final_int6_sliding_window",
     "final_int6_roundtrip",
+    "final_int8_zlib_sliding_window",
     "final_int8_zlib_roundtrip",
 )
 METRIC_PATTERNS: dict[str, re.Pattern[str]] = {
-    metric: re.compile(rf"\b{re.escape(metric)}\b.*?\bval_bpb:([0-9]+(?:\.[0-9]+)?)")
+    metric: re.compile(rf"\b{re.escape(metric)}(?:_exact)?\b.*?\bval_bpb:([0-9]+(?:\.[0-9]+)?)")
     for metric in ACCEPTED_METRICS
 }
 SIZE_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -39,6 +40,7 @@ SIZE_LABELS_BY_METRIC: dict[str, tuple[str, ...]] = {
     "final_int6_sliding_window_s64": ("int6+lzma", "int6+zstd"),
     "final_int6_sliding_window": ("int6+lzma", "int6+zstd"),
     "final_int6_roundtrip": ("int6+lzma", "int6+zstd"),
+    "final_int8_zlib_sliding_window": ("int8+zlib",),
     "final_int8_zlib_roundtrip": ("int8+zlib",),
 }
 
@@ -175,18 +177,18 @@ def extract_metric(log_path: Path) -> tuple[str, float]:
     if not log_path.exists():
         raise FileNotFoundError(f"log file not found: {log_path}")
 
-    found: dict[str, float] = {}
-    saw_any_line = False
-    with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line in handle:
-            saw_any_line = True
-            for metric, pattern in METRIC_PATTERNS.items():
-                match = pattern.search(line)
-                if match:
-                    found[metric] = float(match.group(1))
+    text = log_path.read_text(encoding="utf-8", errors="ignore")
+    return extract_metric_from_text(text, log_path=log_path)
 
-    if not saw_any_line:
+
+def extract_metric_from_text(text: str, *, log_path: Path | str = "<memory>") -> tuple[str, float]:
+    if text == "":
         raise ValueError(f"log is empty: {log_path}")
+
+    found: dict[str, float] = {}
+    for metric, pattern in METRIC_PATTERNS.items():
+        for match in pattern.finditer(text):
+            found[metric] = float(match.group(1))
 
     for metric in ACCEPTED_METRICS:
         if metric in found:
