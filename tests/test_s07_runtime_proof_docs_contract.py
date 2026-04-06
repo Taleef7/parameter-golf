@@ -24,7 +24,9 @@ class RuntimeProofDocsContractTests(unittest.TestCase):
 
     def test_operator_docs_name_required_runtime_signals_and_placeholder_markers(self) -> None:
         for doc in (self.run_configs, self.runpod_guide, self.artifact_readme):
+            self.assertIn("final_int6_sliding_window", doc)
             self.assertIn("final_int6_sliding_window_s64", doc)
+            self.assertIn("stride:64", doc)
             self.assertIn("Total submission size int6+lzma:", doc)
             self.assertIn("preserved_windows_host_note", doc)
             self.assertIn("appended_contract_fixture", doc)

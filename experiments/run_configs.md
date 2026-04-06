@@ -16,7 +16,8 @@ The verifier prefers metrics in this order:
 Interpretation:
 
 - `TTT_ENABLED=1` -> `legal_ttt` is the canonical success metric.
-- `TTT_ENABLED=0` -> `final_int6_sliding_window_s64` is the preferred non-TTT fallback when stride-64 eval runs.
+- `TTT_ENABLED=0` and `EVAL_STRIDE=64` -> the script emits `final_int6_sliding_window ... stride:64`.
+- `TTT_ENABLED=0` and `EVAL_STRIDE!=64` with the supplemental 64-stride pass enabled -> the script also emits `final_int6_sliding_window_s64`.
 - If stride-64 is unavailable, the verifier falls back to `final_int6_sliding_window`, then `final_int6_roundtrip`.
 
 ## Promoted S03 stack
@@ -66,7 +67,7 @@ python experiments/train_gpt_stack.py
 | `VAL_BATCH_SIZE` | `524288` | Adjust validation batch size. |
 | `VAL_LOSS_EVERY` | `4000` | Change validation cadence. |
 | `TRAIN_LOG_EVERY` | `500` | Change train logging cadence. |
-| `EVAL_STRIDE` | `64` | Controls sliding-window eval and the `final_int6_sliding_window_s64` fallback. |
+| `EVAL_STRIDE` | `64` | Controls stride-64 sliding-window eval. With `EVAL_STRIDE=64` the script logs `final_int6_sliding_window ... stride:64`; otherwise it may also emit `final_int6_sliding_window_s64` for the supplemental 64-stride pass. |
 | `WARMUP_STEPS` | `20` | Number of optimizer warmup steps. |
 | `WARMDOWN_ITERS` | `3500` | Length of wallclock-aware warmdown. |
 
@@ -141,7 +142,7 @@ Before overwriting `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_S
 2. The remote Linux/CUDA host satisfies the runtime contract:
    - `python -c "import flash_attn_interface"` succeeds remotely.
    - the dataset root and tokenizer path are readable remotely.
-   - the remote checkout can run `python experiments/verify_run.py --help`.
+   - the remote checkout can import `experiments.verify_run`.
 
 Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
 If any prerequisite check fails, preserve that failure output separately and treat the rerun as blocked instead of appending placeholder content to the fixed evidence logs.
@@ -156,7 +157,12 @@ Keep these settings identical between baseline and adapter runs:
 - `MAX_WALLCLOCK_SECONDS=600`
 - identical dataset/tokenizer paths, seed, and remaining stack knobs
 
-Both logs must resolve to `chosen_metric: final_int6_sliding_window_s64`. If either log resolves to `legal_ttt` or any fallback other than `final_int6_sliding_window_s64`, do not compare them.
+Both logs must satisfy the stride-64 non-TTT contract:
+
+- `chosen_metric: final_int6_sliding_window_s64`, or
+- `chosen_metric: final_int6_sliding_window` with a runtime line containing `stride:64`
+
+If either log resolves to `legal_ttt` or any fallback without the stride-64 signal, do not compare them.
 The closeout rerun target uses `RANDOM_MAP_ADAPTER_GATE_ENABLED=1` with `RANDOM_MAP_ADAPTER_GATE_INIT=1.0`. If those gate vars are absent or disabled, you are reproducing the older ungated adapter path instead of the final fork-owned extension.
 
 ### Baseline run (adapter off)
@@ -244,11 +250,11 @@ python experiments/audit_random_map_runtime_proof.py \
   --adapter records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 ```
 
-The comparison helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT `final_int6_sliding_window_s64` contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
+The comparison helper reuses `experiments/verify_run.py`, fails if either log is not on the non-TTT stride-64 contract, and prints the signed `adapter_minus_baseline_bpb_delta`.
 
-The audit helper is stricter: do not accept placeholder-backed proof. It rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header; it also requires each saved log to contain the expected `random_map_adapter:enabled=...` config line, a `final_int6_sliding_window_s64` runtime line, and a `Total submission size int6+lzma:` line.
+The audit helper is stricter: do not accept placeholder-backed proof. It rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header; it also requires each saved log to contain the expected `random_map_adapter:enabled=...` config line, a stride-64 runtime line (`final_int6_sliding_window ... stride:64` or `final_int6_sliding_window_s64 ... stride:64`), and a `Total submission size int6+lzma:` line.
 
-As of the current closeout snapshot, the committed fixed logs in `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/` are still the last audited ungated pair. Keep them untouched until the learned-gate rerun is executed on a proven Linux/CUDA host.
+The current committed fixed logs now come from the learned-gate closeout rerun on RunPod. They prove the remote path and show that the learned-gate variant is a negative result relative to the baseline under this contract.
 
 ## Notes for future updates
 

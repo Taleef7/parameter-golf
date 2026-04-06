@@ -44,7 +44,7 @@ Expected verifier behavior:
 - prints `chosen_metric: legal_ttt`
 - prints `val_bpb: <value>`
 
-### Non-TTT fallback proof (`final_int6_sliding_window_s64`)
+### Non-TTT fallback proof (stride-64 sliding-window contract)
 
 ```bash
 MAX_WALLCLOCK_SECONDS=600 \
@@ -58,7 +58,8 @@ python experiments/verify_run.py logs/stack_no_ttt.txt
 
 Expected verifier behavior:
 
-- prints `chosen_metric: final_int6_sliding_window_s64`
+- prints `chosen_metric: final_int6_sliding_window` when `EVAL_STRIDE=64`
+- or prints `chosen_metric: final_int6_sliding_window_s64` when the script emits a supplemental 64-stride pass
 - prints `val_bpb: <value>`
 
 ## 3. Real env vars still wired in the script
@@ -162,7 +163,7 @@ Prove the remote execution path before you touch `baseline_no_adapter.log` or `r
 2. Prove the remote runtime prerequisites on the Linux/CUDA host before starting either run:
    - `python -c "import flash_attn_interface"` succeeds.
    - the dataset root and tokenizer path you will use are readable.
-   - `python experiments/verify_run.py --help` works from the remote repo checkout so the same verifier is available there.
+   - `python -c "from experiments import verify_run; print('verify_run:ok')"` works from the remote repo checkout so the same verifier is available there.
 
 Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
 If any prerequisite check fails, stop at that failure boundary, preserve the failing command output separately, and leave the fixed evidence logs untouched rather than appending placeholder fixtures.
@@ -276,13 +277,15 @@ python experiments/audit_random_map_runtime_proof.py \
 
 Expected comparison behavior:
 
-- both logs resolve to `chosen_metric: final_int6_sliding_window_s64`
+- both logs satisfy the stride-64 non-TTT contract:
+  - `chosen_metric: final_int6_sliding_window` with `stride:64`, or
+  - `chosen_metric: final_int6_sliding_window_s64`
 - the helper prints both chosen metrics
 - the helper prints `adapter_minus_baseline_bpb_delta: +/-0.xxxx`
 - do not accept placeholder-backed proof: the audit rejects `preserved_windows_host_note`, `appended_contract_fixture`, and the preserved cmd.exe failure header
-- the audit also requires the baseline/adaptor `random_map_adapter:enabled=...` config lines plus `Total submission size int6+lzma:` in each saved log
+- the audit also requires the baseline/adaptor `random_map_adapter:enabled=...` config lines plus a stride-64 runtime line and `Total submission size int6+lzma:` in each saved log
 
-The committed fixed-path logs remain the last audited ungated evidence pair until a Linux/CUDA rerun proves the learned-gate variant. Do not overwrite them from Windows or with placeholder content.
+The committed fixed-path logs now come from the RunPod learned-gate rerun. They prove the Linux/CUDA path and show that the learned-gate variant underperformed the baseline, so do not treat this branch as a promoted candidate.
 
 ## 6. Troubleshooting
 
@@ -293,4 +296,5 @@ The committed fixed-path logs remain the last audited ungated evidence pair unti
 | `RuntimeError: CUDA is required` | Run attempted outside a CUDA pod | Move to RunPod/Linux with GPU |
 | `Error: no accepted metric found in log` | Run crashed early or log only contains stale aliases | Inspect the log tail and confirm one of the accepted metrics was emitted |
 | `compare_random_map_runs.py` rejects `legal_ttt` | The run was not kept on the first S04 non-TTT contract | Re-run with `TTT_ENABLED=0` and confirm stride-64 eval completed |
-| Verifier chooses `final_int6_roundtrip` or `final_int6_sliding_window` | Sliding-window stride-64 eval did not complete | Check `EVAL_STRIDE`, inspect the log tail, and do not trust the comparison until both logs choose `final_int6_sliding_window_s64` |
+| Verifier chooses `final_int6_roundtrip` | Sliding-window stride-64 eval did not complete | Check `EVAL_STRIDE`, inspect the log tail, and do not trust the comparison until both logs satisfy the stride-64 contract |
+| Verifier chooses `final_int6_sliding_window` | This is acceptable only if the corresponding runtime line includes `stride:64` | Inspect the log tail and only accept the comparison if the stride-64 line is present |

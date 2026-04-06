@@ -5,9 +5,9 @@ Usage:
     python experiments/compare_random_map_runs.py <baseline_log> <adapter_log>
 
 The helper intentionally stays thin: it shells through experiments/verify_run.py for
-both logs, requires both to resolve to the non-TTT fallback metric
-``final_int6_sliding_window_s64``, and prints the signed adapter-minus-baseline BPB
-delta so operators do not hand-compare markdown or improvised env-var mixes.
+both logs, requires both to resolve to the non-TTT stride-64 sliding-window
+contract, and prints the signed adapter-minus-baseline BPB delta so operators do
+not hand-compare markdown or improvised env-var mixes.
 """
 from __future__ import annotations
 
@@ -17,9 +17,19 @@ import sys
 from pathlib import Path
 
 EXPECTED_METRIC = "final_int6_sliding_window_s64"
+FALLBACK_STRIDE64_METRIC = "final_int6_sliding_window"
 VERIFY_SCRIPT = Path(__file__).with_name("verify_run.py")
 VAL_BPB_PATTERN = re.compile(r"^val_bpb:\s*([0-9]+(?:\.[0-9]+)?)$", re.MULTILINE)
 CHOSEN_METRIC_PATTERN = re.compile(r"^chosen_metric:\s*(\S+)$", re.MULTILINE)
+STRIDE64_LINE_PATTERN = re.compile(r"\bfinal_int6_sliding_window\b.*\bstride:64\b")
+
+
+def metric_satisfies_non_ttt_contract(log_text: str, metric: str) -> bool:
+    if metric == EXPECTED_METRIC:
+        return True
+    if metric == FALLBACK_STRIDE64_METRIC:
+        return STRIDE64_LINE_PATTERN.search(log_text) is not None
+    return False
 
 
 def run_verifier(log_path: Path) -> tuple[str, float]:
@@ -38,9 +48,11 @@ def run_verifier(log_path: Path) -> tuple[str, float]:
         raise RuntimeError(f"verify_run output for {log_path} is missing val_bpb")
 
     metric = metric_match.group(1)
-    if metric != EXPECTED_METRIC:
+    log_text = log_path.read_text(encoding="utf-8", errors="ignore")
+    if not metric_satisfies_non_ttt_contract(log_text, metric):
         raise RuntimeError(
-            f"{log_path} chose metric {metric}, expected {EXPECTED_METRIC} for the first S04 non-TTT comparison"
+            f"{log_path} chose metric {metric}, expected the stride-64 non-TTT comparison contract "
+            f"({EXPECTED_METRIC} or {FALLBACK_STRIDE64_METRIC} with stride:64)"
         )
     return metric, float(value_match.group(1))
 

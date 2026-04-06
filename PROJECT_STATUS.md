@@ -68,31 +68,33 @@ The promoted S03 legal-TTT package is complete as an evidence package. The curre
 
 ### Random-map adapter package
 
-The non-record package is complete as a fixed-path experiment package, but the last committed evidence pair is still the ungated adapter comparison:
+The non-record package is complete as a fixed-path experiment package and now contains a real Linux/CUDA rerun of the learned-gate variant:
 
 - `baseline_no_adapter.log`
 - `random_map_adapter.log`
+- `runpod_capability_check_2026-04-05.txt`
 
-Those logs remain the last audited A/B pair and should not be overwritten from Windows or with placeholder content.
+The remote A/B result closes the branch as a negative result:
+
+- baseline `val_bpb`: `2.2096`
+- learned-gate adapter `val_bpb`: `2.2804`
+- signed delta: `+0.0708`
+- baseline total bytes: `7,335,405`
+- learned-gate total bytes: `7,277,705`
+
+The adapter made the artifact smaller, but it made the metric materially worse. That means the branch is now implemented, remotely verified, and archived rather than still open.
 
 ## What Is Still Blocked
 
-The learned-gate adapter variant is implemented locally, but the clean remote rerun is still blocked on proving a Linux/CUDA control path from this workspace.
+No major closeout blocker remains in the fork itself.
 
-As of 2026-04-05, the closeout state is:
+As of 2026-04-06, the closeout state is:
 
-- the local code and docs are ready for the learned-gate rerun contract
-- the fixed ungated evidence logs are preserved
-- the actual learned-gate rerun still requires a proven RunPod or SSH path to a Linux/CUDA host before spending the remaining compute credit
-- the current local control-path evidence is recorded in `records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/runpod_capability_check_2026-04-05.txt`
-
-That capability check currently records:
-
-- `runpodctl:missing`
-- `RUNPOD_API_KEY:missing`
-- local `ssh.exe` present, but no authenticated remote host proven
-
-If the remote gate cannot be proven, treat the learned-gate branch as implemented-but-unverified rather than silently treating the old ungated logs as proof for the new behavior.
+- the local code and docs are complete
+- the RunPod control path was proven
+- the learned-gate rerun was executed on Linux/CUDA
+- the fixed logs were copied back into the repo
+- the branch outcome is now explicit: negative result, not promotion candidate
 
 ## Recommended Entry Points
 
@@ -110,6 +112,6 @@ This fork is finished as a public-ready research/evidence snapshot when these st
 - local verification runs from the project venv with `python -m pytest -q`
 - record snapshots stay byte-identical with their canonical experiment sources
 - the promoted legal-TTT package remains intact
-- the random-map adapter package is explicitly labeled as ungated evidence plus a newer learned-gate code path awaiting Linux/CUDA proof
+- the random-map adapter package is explicitly labeled as a remotely verified negative-result branch rather than a promotion candidate
 
 That is the intended final interpretation of this repository.

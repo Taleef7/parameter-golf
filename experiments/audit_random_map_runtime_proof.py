@@ -19,7 +19,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.compare_random_map_runs import EXPECTED_METRIC, run_verifier
+from experiments.compare_random_map_runs import (
+    EXPECTED_METRIC,
+    FALLBACK_STRIDE64_METRIC,
+    metric_satisfies_non_ttt_contract,
+    run_verifier,
+)
 ARTIFACT_DIR = ROOT / "records" / "track_non_record_16mb" / "2026-03-28_RandomMapAdapters_Stack"
 DEFAULT_BASELINE_LOG = ARTIFACT_DIR / "baseline_no_adapter.log"
 DEFAULT_ADAPTER_LOG = ARTIFACT_DIR / "random_map_adapter.log"
@@ -42,6 +47,8 @@ REQUIRED_DOC_SNIPPETS: tuple[str, ...] = (
     "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
     "python experiments/audit_random_map_runtime_proof.py",
     "final_int6_sliding_window_s64",
+    "final_int6_sliding_window",
+    "stride:64",
     "Total submission size int6+lzma:",
     "preserved_windows_host_note",
     "appended_contract_fixture",
@@ -55,10 +62,10 @@ EXPERIMENTS_DOC_SNIPPETS: tuple[str, ...] = (
     "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md",
     "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log",
     "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
-    "final_int6_sliding_window_s64",
-    "1.1400",
-    "1.1300",
-    "-0.0100",
+    "final_int6_sliding_window",
+    "2.2096",
+    "2.2804",
+    "+0.0708",
     "non-record",
 )
 
@@ -122,9 +129,9 @@ def audit_log(log_path: Path, *, label: str, expected_config_line: str) -> LogAu
         raise RandomMapRuntimeAuditError(
             f"{label} log {log_path} is missing expected config line: {expected_config_line}"
         )
-    if EXPECTED_METRIC not in text:
+    if not metric_satisfies_non_ttt_contract(text, EXPECTED_METRIC if EXPECTED_METRIC in text else FALLBACK_STRIDE64_METRIC):
         raise RandomMapRuntimeAuditError(
-            f"{label} log {log_path} is missing required metric line containing {EXPECTED_METRIC}"
+            f"{label} log {log_path} is missing a required stride-64 non-TTT metric line"
         )
 
     total_submission_bytes = _extract_size_bytes(text, log_path=log_path)

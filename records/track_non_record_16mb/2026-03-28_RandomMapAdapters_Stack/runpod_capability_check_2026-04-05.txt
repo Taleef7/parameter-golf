@@ -1,17 +1,39 @@
-RunPod / remote capability check recorded from the local Windows workspace on 2026-04-05.
+RunPod / remote capability and rerun record from the local Windows workspace.
 
-Local control-path checks:
+Initial local control-path checks were completed on 2026-04-05:
 
-- runpodctl:missing
-- RUNPOD_API_KEY:missing
-- ssh:C:\Windows\System32\OpenSSH\ssh.exe
+- runpodctl installed locally
+- RunPod API config present in C:\Users\talee\.runpod\config.toml
+- SSH keypair present in C:\Users\talee\.runpod\ssh\
+
+Remote execution was completed on 2026-04-06 using the official RunPod Parameter Golf template:
+
+- pod id: 3apx8rev8894vi
+- image: runpod/parameter-golf:latest
+- gpu: NVIDIA H100 80GB HBM3
+- branch checked out remotely: feature/final-closeout @ dbd2b5c
+
+Remote runtime gate results:
+
+- flash_attn_interface:ok
+- dataset present at /workspace/parameter-golf/data/datasets/fineweb10B_sp1024
+- tokenizer present at /workspace/parameter-golf/data/tokenizers/fineweb_1024_bpe.model
+- zstandard installed successfully with --break-system-packages on the ephemeral pod
+
+Verified remote A/B results copied back into this folder:
+
+- baseline_no_adapter.log
+  - chosen_metric: final_int6_sliding_window
+  - val_bpb: 2.2096
+  - total_submission_bytes: 7335405
+
+- random_map_adapter.log
+  - chosen_metric: final_int6_sliding_window
+  - val_bpb: 2.2804
+  - total_submission_bytes: 7277705
+
+- adapter_minus_baseline_bpb_delta: +0.0708
 
 Interpretation:
 
-- The local machine does not currently have the RunPod CLI installed.
-- No RunPod API key is present in the environment.
-- An SSH client exists locally, but no authenticated remote host route was proven from this workspace.
-
-Result:
-
-The learned-gate random-map adapter rerun remains blocked at the control-path gate. Preserve the committed fixed evidence logs until a Linux/CUDA host is proven reachable and can satisfy the remote runtime checks described in the package README and run guides.
+The Linux/CUDA rerun path is proven. The learned-gate adapter branch is a verified negative result under the stride-64 non-TTT contract and should remain archived as non-record evidence rather than promoted.

@@ -25,7 +25,7 @@ Before overwriting `baseline_no_adapter.log` or `random_map_adapter.log`, prove 
 
 1. `runpodctl` is installed locally and `RUNPOD_API_KEY` is set, **or** an authenticated `ssh <remote-host>` / `scp <remote-host>` route already reaches the target checkout.
 2. The remote host can run `python -c "import flash_attn_interface"` successfully.
-3. The dataset root, tokenizer path, and `python experiments/verify_run.py --help` all work from that same remote checkout.
+3. The dataset root, tokenizer path, and `python experiments/verify_run.py <log>` all work from that same remote checkout.
 
 Do not rerun or overwrite the fixed logs until one of those control paths is proven from this workspace.
 If any prerequisite fails, preserve that failure separately instead of inserting `preserved_windows_host_note` or `appended_contract_fixture` markers into the fixed evidence logs.
@@ -41,7 +41,12 @@ Both runs keep these shared settings identical:
 - `MAX_WALLCLOCK_SECONDS=600`
 - identical dataset/tokenizer paths, seed, and remaining stack knobs
 
-The accepted metric for this comparison is `final_int6_sliding_window_s64`. Each log must also contain `Total submission size int6+lzma:`.
+The accepted metric contract for this comparison is the stride-64 non-TTT sliding-window surface:
+
+- `final_int6_sliding_window ... stride:64` when `EVAL_STRIDE=64`, or
+- `final_int6_sliding_window_s64 ... stride:64` when the script emits a supplemental 64-stride pass
+
+Each log must also contain `Total submission size int6+lzma:`.
 The final closeout rerun target also enables:
 
 - `RANDOM_MAP_ADAPTER_GATE_ENABLED=1`
@@ -102,24 +107,22 @@ The audit rejects placeholder markers such as `preserved_windows_host_note`, `ap
 
 ## Current fixed-path evidence summary
 
-The saved evidence pair currently audits cleanly through the local verifier/comparison/audit stack.
-Those logs predate the learned-gate extension, so they remain the last audited ungated pair until a Linux/CUDA rerun proves the new gate-enabled variant:
+The saved evidence pair now comes from the real Linux/CUDA learned-gate rerun executed on the official RunPod Parameter Golf template. The verifier/comparison/audit stack accepts the pair through the stride-64 non-TTT contract:
 
-- `baseline_no_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1400`, `Total submission size int6+lzma: 15600000 bytes`
-- `random_map_adapter.log` -> `chosen_metric: final_int6_sliding_window_s64`, `val_bpb: 1.1300`, `Total submission size int6+lzma: 15680000 bytes`
-- `adapter_minus_baseline_bpb_delta: -0.0100`
+- `baseline_no_adapter.log` -> `chosen_metric: final_int6_sliding_window`, `val_bpb: 2.2096`, `Total submission size int6+lzma: 7335405 bytes`
+- `random_map_adapter.log` -> `chosen_metric: final_int6_sliding_window`, `val_bpb: 2.2804`, `Total submission size int6+lzma: 7277705 bytes`
+- `adapter_minus_baseline_bpb_delta: +0.0708`
 
-Interpretation: the ungated adapter improves `final_int6_sliding_window_s64` by 0.0100 bpb, but it also increases total artifact size by 80,000 bytes. This remains a **non-record** package, so it does not count toward the S06 real-ablation ledger and should not be confused with the promoted legal-TTT submission evidence.
-The learned-gate variant is implemented in `train_gpt.py`, but it still needs a clean Linux/CUDA rerun before these fixed logs can be replaced.
+Interpretation: the learned-gate adapter is a **negative result** on the verified remote rerun. It reduces artifact size by 57,700 bytes, but it worsens `val_bpb` by 0.0708 relative to the baseline under the same non-TTT stride-64 contract. This remains a **non-record** package, so it does not count toward the S06 real-ablation ledger and should not be confused with the promoted legal-TTT submission evidence.
 
 ## Keep / drop decision
 
-**Decision: drop from the promoted submission path for now; keep as a reusable non-record experiment package.**
+**Decision: archive as a reusable non-record negative-result package; do not promote.**
 
 Why:
 
-1. The measured delta is modest (`-0.0100` bpb) relative to the already-promoted legal-TTT stack.
-2. The adapter increases artifact size from 15,600,000 to 15,680,000 bytes.
-3. The experiment is useful evidence for future reuse, but it is not part of the audited promoted submission package.
+1. The verified learned-gate rerun is worse than baseline by `+0.0708` bpb.
+2. The adapter does reduce artifact size from `7,335,405` to `7,277,705` bytes, but that size win is not enough to justify the loss increase.
+3. The experiment is still useful evidence because it closes the branch with a real remote negative result instead of leaving it ambiguous.
 
-If a future rerun on the intended Linux/CUDA host produces a materially better delta under the same fixed-path contract, update these same files in place and rerun the verifier/comparison/audit commands above.
+If a future rerun or architecture change materially improves this branch under the same fixed-path contract, update these same files in place and rerun the verifier/comparison/audit commands above.

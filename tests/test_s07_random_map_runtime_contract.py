@@ -58,6 +58,38 @@ class RandomMapRuntimeProofContractTests(unittest.TestCase):
         self.assertEqual(payload["pair"]["adapter"]["chosen_metric"], audit.EXPECTED_METRIC)
         self.assertAlmostEqual(payload["pair"]["adapter_minus_baseline_bpb_delta"], -0.01)
 
+    def test_stride64_sliding_window_form_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            baseline = tmpdir / "baseline.log"
+            adapter = tmpdir / "adapter.log"
+            baseline.write_text(
+                "\n".join(
+                    [
+                        audit.EXPECTED_CONFIG_LINES["baseline"],
+                        "Total submission size int6+lzma: 7335405 bytes",
+                        "final_int6_sliding_window val_loss:3.7307 val_bpb:2.2096 stride:64 eval_time:566698ms",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            adapter.write_text(
+                "\n".join(
+                    [
+                        audit.EXPECTED_CONFIG_LINES["adapter"] + " gate_enabled=True gate_init=1.0000",
+                        "Total submission size int6+lzma: 7277705 bytes",
+                        "final_int6_sliding_window val_loss:3.8503 val_bpb:2.2804 stride:64 eval_time:577483ms",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            payload = audit.run_audit(baseline_log=baseline, adapter_log=adapter)
+        self.assertEqual(payload["pair"]["baseline"]["chosen_metric"], "final_int6_sliding_window")
+        self.assertEqual(payload["pair"]["adapter"]["chosen_metric"], "final_int6_sliding_window")
+        self.assertAlmostEqual(payload["pair"]["adapter_minus_baseline_bpb_delta"], 0.0708)
+
     def test_missing_log_path_fails_loudly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
@@ -128,7 +160,7 @@ class RandomMapRuntimeProofContractTests(unittest.TestCase):
                 extra_lines=["legal_ttt val_loss:0.8000 val_bpb:1.1200"],
             )
             adapter = self.make_log(tmpdir, label="adapter", enabled=True)
-            with self.assertRaisesRegex(audit.RandomMapRuntimeAuditError, "expected final_int6_sliding_window_s64"):
+            with self.assertRaisesRegex(audit.RandomMapRuntimeAuditError, "expected the stride-64 non-TTT comparison contract"):
                 audit.run_audit(baseline_log=baseline, adapter_log=adapter)
 
     def test_doc_audit_requires_fixed_paths_audit_command_and_placeholder_rule(self) -> None:

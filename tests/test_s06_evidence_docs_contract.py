@@ -87,10 +87,10 @@ class S06EvidenceDocsContractTests(unittest.TestCase):
 
         comparison = by_artifact["Random-map adapter comparison"]
         self.assertEqual(comparison["Counts Toward 5+ Target"], "No")
-        self.assertEqual(comparison["Metric"], "`final_int6_sliding_window_s64`")
-        self.assertEqual(float(comparison["val_bpb"]), 1.1300)
-        self.assertEqual(int(comparison["Total Bytes"]), 15680000)
-        self.assertIn("adapter_minus_baseline_bpb_delta: -0.0100", comparison["Why excluded"])
+        self.assertEqual(comparison["Metric"], "`final_int6_sliding_window`")
+        self.assertEqual(float(comparison["val_bpb"]), 2.2804)
+        self.assertEqual(int(comparison["Total Bytes"]), 7277705)
+        self.assertIn("adapter_minus_baseline_bpb_delta: +0.0708", comparison["Why excluded"])
         self.assertIn("non-record experiment package", comparison["Why excluded"])
         self.assertIn("track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/README.md", comparison["Source"])
 

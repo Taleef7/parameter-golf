@@ -61,6 +61,8 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
     def test_helper_source_reuses_verifier_and_enforces_expected_metric(self) -> None:
         self.assertIn("verify_run.py", self.helper_source)
         self.assertIn('EXPECTED_METRIC = "final_int6_sliding_window_s64"', self.helper_source)
+        self.assertIn('FALLBACK_STRIDE64_METRIC = "final_int6_sliding_window"', self.helper_source)
+        self.assertIn("metric_satisfies_non_ttt_contract", self.helper_source)
         self.assertIn("adapter_minus_baseline_bpb_delta", self.helper_source)
 
     def test_audit_source_rejects_placeholders_and_requires_runtime_signals(self) -> None:
@@ -97,6 +99,39 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.assertEqual(worse_result.returncode, 0, worse_result.stderr)
             self.assertIn("adapter_minus_baseline_bpb_delta: +0.0300", worse_result.stdout)
 
+    def test_helper_accepts_stride64_sliding_window_contract(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmpdir:
+            tmp = Path(tmpdir)
+            baseline = tmp / "baseline.log"
+            adapter = tmp / "adapter.log"
+            baseline.write_text(
+                "\n".join(
+                    [
+                        "random_map_adapter:enabled=False rank=0 layers=[] targets=[] seed=1729 scale_init=0.0000 gate_enabled=False gate_init=1.0000",
+                        "final_int6_sliding_window val_loss:0.8150 val_bpb:2.2096 stride:64 eval_time:566698ms",
+                        "Total submission size int6+lzma: 7335405 bytes",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            adapter.write_text(
+                "\n".join(
+                    [
+                        "random_map_adapter:enabled=True rank=8 layers=[9, 10] targets=['q', 'v'] seed=1729 scale_init=0.0100 gate_enabled=True gate_init=1.0000",
+                        "final_int6_sliding_window val_loss:0.8160 val_bpb:2.2804 stride:64 eval_time:577483ms",
+                        "Total submission size int6+lzma: 7277705 bytes",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = self.run_helper(baseline, adapter)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("baseline_metric: final_int6_sliding_window", result.stdout)
+            self.assertIn("adapter_metric: final_int6_sliding_window", result.stdout)
+            self.assertIn("adapter_minus_baseline_bpb_delta: +0.0708", result.stdout)
+
     def test_helper_fails_on_missing_paths_and_wrong_arity(self) -> None:
         wrong_arity = self.run_helper(BASELINE_FIXTURE)
         self.assertNotEqual(wrong_arity.returncode, 0)
@@ -116,7 +151,7 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.write_log(adapter, "legal_ttt", 1.1800)
             result = self.run_helper(baseline, adapter)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("expected final_int6_sliding_window_s64", result.stderr)
+            self.assertIn("expected the stride-64 non-TTT comparison contract", result.stderr)
             self.assertIn("legal_ttt", result.stderr)
 
     def test_docs_lock_one_non_ttt_runtime_proof_protocol(self) -> None:
@@ -134,7 +169,9 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             self.assertIn("RANDOM_MAP_ADAPTER_GATE_INIT=1.0", doc)
             self.assertIn("baseline_no_adapter.log", doc)
             self.assertIn("random_map_adapter.log", doc)
+            self.assertIn("final_int6_sliding_window", doc)
             self.assertIn("final_int6_sliding_window_s64", doc)
+            self.assertIn("stride:64", doc)
             self.assertIn("Total submission size int6+lzma:", doc)
             self.assertIn("preserved_windows_host_note", doc)
             self.assertIn("appended_contract_fixture", doc)
@@ -154,7 +191,7 @@ class RandomMapAdapterRunContractTests(unittest.TestCase):
             "records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('"adapter_minus_baseline_bpb_delta": -0.01', result.stdout)
+        self.assertIn('"adapter_minus_baseline_bpb_delta": 0.0708000000000002', result.stdout)
 
     def test_docs_only_name_supported_random_map_knobs(self) -> None:
         for knob in [
