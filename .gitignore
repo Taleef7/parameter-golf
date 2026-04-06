@@ -33,6 +33,8 @@ venv/
 target/
 vendor/
 *.log
+!records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log
+!records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
 coverage/
 .cache/
 tmp/
