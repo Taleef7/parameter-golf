@@ -56,8 +56,12 @@ class Hyperparameters:
     warmup_steps = int(os.environ.get("WARMUP_STEPS", 20))
     train_batch_tokens = int(os.environ.get("TRAIN_BATCH_TOKENS", 524_288))
     train_seq_len = int(os.environ.get("TRAIN_SEQ_LEN", 1024))
+    eval_seq_len = int(os.environ.get("EVAL_SEQ_LEN", os.environ.get("TRAIN_SEQ_LEN", 1024)))
     max_wallclock_seconds = float(os.environ.get("MAX_WALLCLOCK_SECONDS", 600.0))
     qk_gain_init = float(os.environ.get("QK_GAIN_INIT", 1.5))
+    curriculum_seq_enabled = bool(int(os.environ.get("CURRICULUM_SEQ_ENABLED", "0")))
+    curriculum_seq_short = int(os.environ.get("CURRICULUM_SEQ_SHORT", 512))
+    curriculum_seq_switch_seconds = float(os.environ.get("CURRICULUM_SEQ_SWITCH_SECONDS", 180.0))
 
     # Model shape.
     vocab_size = int(os.environ.get("VOCAB_SIZE", 1024))
@@ -69,6 +73,8 @@ class Hyperparameters:
     tie_embeddings = bool(int(os.environ.get("TIE_EMBEDDINGS", "1")))
     rope_base = float(os.environ.get("ROPE_BASE", 10000.0))
     logit_softcap = float(os.environ.get("LOGIT_SOFTCAP", 30.0))
+    token_aware_emb_enabled = bool(int(os.environ.get("TOKEN_AWARE_EMB_ENABLED", "0")))
+    token_aware_emb_max_scale = float(os.environ.get("TOKEN_AWARE_EMB_MAX_SCALE", 0.10))
 
     # Optimizer hyperparameters.
     embed_lr = float(os.environ.get("EMBED_LR", 0.6))
@@ -204,6 +210,104 @@ def build_sentencepiece_luts(
     )
 
 
+TOKEN_CLASS_SPECIAL = 0
+TOKEN_CLASS_RAW_BYTE = 1
+TOKEN_CLASS_BOUNDARY_PIECE = 2
+TOKEN_CLASS_CONTINUATION_PIECE = 3
+TOKEN_AWARE_CLASS_COUNT = 4
+TOKEN_AWARE_BYTE_BUCKET_COUNT = 5
+
+
+def classify_token_piece(
+    piece: str,
+    *,
+    is_control: bool,
+    is_unknown: bool,
+    is_unused: bool,
+    is_byte: bool,
+) -> int:
+    if is_control or is_unknown or is_unused:
+        return TOKEN_CLASS_SPECIAL
+    if is_byte:
+        return TOKEN_CLASS_RAW_BYTE
+    if piece.startswith("▁"):
+        return TOKEN_CLASS_BOUNDARY_PIECE
+    return TOKEN_CLASS_CONTINUATION_PIECE
+
+
+def classify_token_piece_byte_bucket(
+    piece: str,
+    *,
+    is_control: bool = False,
+    is_unknown: bool = False,
+    is_unused: bool = False,
+    is_byte: bool,
+) -> int:
+    if is_control or is_unknown or is_unused:
+        return 0
+    if is_byte:
+        return 1
+    if piece.startswith("▁"):
+        piece = piece[1:]
+    byte_len = len(piece.encode("utf-8"))
+    return min(byte_len, TOKEN_AWARE_BYTE_BUCKET_COUNT - 1)
+
+
+def build_token_aware_bucket_luts(
+    sp: spm.SentencePieceProcessor, vocab_size: int, device: torch.device
+) -> tuple[Tensor, Tensor]:
+    sp_vocab_size = int(sp.vocab_size())
+    table_size = max(sp_vocab_size, vocab_size)
+    class_ids = np.full((table_size,), TOKEN_CLASS_SPECIAL, dtype=np.int16)
+    byte_ids = np.zeros((table_size,), dtype=np.int16)
+    for token_id in range(sp_vocab_size):
+        piece = sp.id_to_piece(token_id)
+        class_ids[token_id] = classify_token_piece(
+            piece,
+            is_control=sp.is_control(token_id),
+            is_unknown=sp.is_unknown(token_id),
+            is_unused=sp.is_unused(token_id),
+            is_byte=sp.is_byte(token_id),
+        )
+        byte_ids[token_id] = classify_token_piece_byte_bucket(
+            piece,
+            is_control=sp.is_control(token_id),
+            is_unknown=sp.is_unknown(token_id),
+            is_unused=sp.is_unused(token_id),
+            is_byte=sp.is_byte(token_id),
+        )
+    return (
+        torch.tensor(class_ids, dtype=torch.int16, device=device),
+        torch.tensor(byte_ids, dtype=torch.int16, device=device),
+    )
+
+
+class TokenAwareEmbeddingCalibration(nn.Module):
+    def __init__(self, model_dim: int, max_scale: float):
+        super().__init__()
+        if max_scale < 0.0:
+            raise ValueError(f"max_scale must be non-negative, got {max_scale}")
+        self.max_scale = float(max_scale)
+        self.class_gain = nn.Parameter(torch.zeros(TOKEN_AWARE_CLASS_COUNT, model_dim, dtype=torch.float32))
+        self.byte_gain = nn.Parameter(torch.zeros(TOKEN_AWARE_BYTE_BUCKET_COUNT, model_dim, dtype=torch.float32))
+
+    def forward(self, embeddings: Tensor, token_class_ids: Tensor, token_byte_ids: Tensor) -> Tensor:
+        if self.max_scale == 0.0:
+            return embeddings
+        class_gain = self.class_gain[token_class_ids].to(dtype=embeddings.dtype)
+        byte_gain = self.byte_gain[token_byte_ids].to(dtype=embeddings.dtype)
+        scale = 1.0 + self.max_scale * torch.tanh(class_gain + byte_gain)
+        return embeddings * scale
+
+
+def resolve_train_seq_len(args: Hyperparameters, elapsed_seconds: float) -> int:
+    if not args.curriculum_seq_enabled:
+        return args.train_seq_len
+    if elapsed_seconds < args.curriculum_seq_switch_seconds:
+        return args.curriculum_seq_short
+    return args.train_seq_len
+
+
 def load_validation_tokens(pattern: str, seq_len: int) -> Tensor:
     files = [Path(p) for p in sorted(glob.glob(pattern))]
     if not files:
@@ -232,14 +336,14 @@ def eval_val(
     # - val_loss: token cross-entropy (natural log)
     # - val_bpb: tokenizer-agnostic compression metric used by the challenge
     local_batch_tokens = args.val_batch_size // (world_size * grad_accum_steps)
-    if local_batch_tokens < args.train_seq_len:
+    if local_batch_tokens < args.eval_seq_len:
         raise ValueError(
             "VAL_BATCH_SIZE must provide at least one sequence per rank; "
             f"got VAL_BATCH_SIZE={args.val_batch_size}, WORLD_SIZE={world_size}, "
-            f"GRAD_ACCUM_STEPS={grad_accum_steps}, TRAIN_SEQ_LEN={args.train_seq_len}"
+            f"GRAD_ACCUM_STEPS={grad_accum_steps}, EVAL_SEQ_LEN={args.eval_seq_len}"
         )
-    local_batch_seqs = local_batch_tokens // args.train_seq_len
-    total_seqs = (val_tokens.numel() - 1) // args.train_seq_len
+    local_batch_seqs = local_batch_tokens // args.eval_seq_len
+    total_seqs = (val_tokens.numel() - 1) // args.eval_seq_len
     seq_start = (total_seqs * rank) // world_size
     seq_end = (total_seqs * (rank + 1)) // world_size
     val_loss_sum = torch.zeros((), device=device, dtype=torch.float64)
@@ -250,11 +354,11 @@ def eval_val(
     with torch.inference_mode():
         for batch_seq_start in range(seq_start, seq_end, local_batch_seqs):
             batch_seq_end = min(batch_seq_start + local_batch_seqs, seq_end)
-            raw_start = batch_seq_start * args.train_seq_len
-            raw_end = batch_seq_end * args.train_seq_len + 1
+            raw_start = batch_seq_start * args.eval_seq_len
+            raw_end = batch_seq_end * args.eval_seq_len + 1
             local = val_tokens[raw_start:raw_end].to(device=device, dtype=torch.int64, non_blocking=True)
-            x = local[:-1].reshape(-1, args.train_seq_len)
-            y = local[1:].reshape(-1, args.train_seq_len)
+            x = local[:-1].reshape(-1, args.eval_seq_len)
+            y = local[1:].reshape(-1, args.eval_seq_len)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                 batch_loss = model(x, y).detach()
             batch_token_count = float(y.numel())
@@ -289,7 +393,7 @@ CONTROL_TENSOR_NAME_PATTERNS = tuple(
     pattern
     for pattern in os.environ.get(
         "CONTROL_TENSOR_NAME_PATTERNS",
-        "attn_scale,attn_scales,mlp_scale,mlp_scales,resid_mix,resid_mixes,q_gain,skip_weight,skip_weights",
+        "attn_scale,attn_scales,mlp_scale,mlp_scales,resid_mix,resid_mixes,q_gain,skip_weight,skip_weights,token_aware_emb",
     ).split(",")
     if pattern
 )
@@ -659,6 +763,10 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        token_aware_emb_enabled: bool = False,
+        token_aware_emb_max_scale: float = 0.0,
+        token_aware_class_ids: Tensor | None = None,
+        token_aware_byte_ids: Tensor | None = None,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -667,6 +775,13 @@ class GPT(nn.Module):
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
         self.tok_emb = nn.Embedding(vocab_size, model_dim)
+        self.token_aware_emb = None
+        if token_aware_emb_enabled:
+            if token_aware_class_ids is None or token_aware_byte_ids is None:
+                raise ValueError("token-aware embedding calibration requires class and byte lookup tensors")
+            self.token_aware_emb = TokenAwareEmbeddingCalibration(model_dim=model_dim, max_scale=token_aware_emb_max_scale)
+            self.register_buffer("token_aware_class_ids", token_aware_class_ids.to(dtype=torch.int64), persistent=False)
+            self.register_buffer("token_aware_byte_ids", token_aware_byte_ids.to(dtype=torch.int64), persistent=False)
         self.num_encoder_layers = num_layers // 2
         self.num_decoder_layers = num_layers - self.num_encoder_layers
         self.num_skip_weights = min(self.num_encoder_layers, self.num_decoder_layers)
@@ -699,6 +814,10 @@ class GPT(nn.Module):
 
     def forward(self, input_ids: Tensor, target_ids: Tensor) -> Tensor:
         x = self.tok_emb(input_ids)
+        if self.token_aware_emb is not None:
+            token_class_ids = self.token_aware_class_ids[input_ids]
+            token_byte_ids = self.token_aware_byte_ids[input_ids]
+            x = self.token_aware_emb(x, token_class_ids, token_byte_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
         skips: list[Tensor] = []
@@ -733,6 +852,17 @@ def main() -> None:
 
     code = Path(__file__).read_text(encoding="utf-8")
     args = Hyperparameters()
+    if args.eval_seq_len <= 0:
+        raise ValueError(f"EVAL_SEQ_LEN must be positive, got {args.eval_seq_len}")
+    if args.curriculum_seq_enabled:
+        if args.curriculum_seq_short <= 0:
+            raise ValueError(f"CURRICULUM_SEQ_SHORT must be positive, got {args.curriculum_seq_short}")
+        if args.curriculum_seq_short > args.train_seq_len:
+            raise ValueError(
+                f"CURRICULUM_SEQ_SHORT={args.curriculum_seq_short} must be <= TRAIN_SEQ_LEN={args.train_seq_len}"
+            )
+    if args.token_aware_emb_max_scale < 0.0:
+        raise ValueError(f"TOKEN_AWARE_EMB_MAX_SCALE must be non-negative, got {args.token_aware_emb_max_scale}")
     zeropower_via_newtonschulz5 = torch.compile(zeropower_via_newtonschulz5)
 
     # -----------------------------
@@ -813,10 +943,14 @@ def main() -> None:
         )
     dataset_dir = Path(args.data_path).resolve()
     actual_train_files = len(list(dataset_dir.glob("fineweb_train_*.bin")))
-    val_tokens = load_validation_tokens(args.val_files, args.train_seq_len)
+    val_tokens = load_validation_tokens(args.val_files, args.eval_seq_len)
     base_bytes_lut, has_leading_space_lut, is_boundary_token_lut = build_sentencepiece_luts(
         sp, args.vocab_size, device
     )
+    token_aware_class_lut = None
+    token_aware_byte_lut = None
+    if args.token_aware_emb_enabled:
+        token_aware_class_lut, token_aware_byte_lut = build_token_aware_bucket_luts(sp, args.vocab_size, device)
     log0(f"val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path={args.tokenizer_path}")
     log0(f"train_loader:dataset:{dataset_dir.name} train_shards:{actual_train_files}")
     log0(f"val_loader:shards pattern={args.val_files} tokens:{val_tokens.numel() - 1}")
@@ -837,6 +971,10 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        token_aware_emb_enabled=args.token_aware_emb_enabled,
+        token_aware_emb_max_scale=args.token_aware_emb_max_scale,
+        token_aware_class_ids=token_aware_class_lut,
+        token_aware_byte_ids=token_aware_byte_lut,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -906,8 +1044,16 @@ def main() -> None:
     )
     log0(
         f"train_batch_tokens:{args.train_batch_tokens} train_seq_len:{args.train_seq_len} "
+        f"eval_seq_len:{args.eval_seq_len} "
         f"iterations:{args.iterations} warmup_steps:{args.warmup_steps} "
         f"max_wallclock_seconds:{args.max_wallclock_seconds:.3f}"
+    )
+    log0(
+        f"token_aware_emb:enabled={args.token_aware_emb_enabled} max_scale:{args.token_aware_emb_max_scale:.4f}"
+    )
+    log0(
+        f"curriculum_seq:enabled={args.curriculum_seq_enabled} short:{args.curriculum_seq_short} "
+        f"switch_seconds:{args.curriculum_seq_switch_seconds:.1f}"
     )
     log0(f"seed:{args.seed}")
 
@@ -940,12 +1086,16 @@ def main() -> None:
         initial_model_state = {name: tensor.detach().cpu().clone() for name, tensor in base_model.state_dict().items()}
         initial_optimizer_states = [copy.deepcopy(opt.state_dict()) for opt in optimizers]
         model.train()
+        warmup_seq_lens = [args.train_seq_len]
+        if args.curriculum_seq_enabled and args.curriculum_seq_short != args.train_seq_len:
+            warmup_seq_lens = [args.curriculum_seq_short, args.train_seq_len]
         for warmup_step in range(args.warmup_steps):
             zero_grad_all()
+            warmup_seq_len = warmup_seq_lens[warmup_step % len(warmup_seq_lens)]
             for micro_step in range(grad_accum_steps):
                 if distributed:
                     model.require_backward_grad_sync = micro_step == grad_accum_steps - 1
-                x, y = train_loader.next_batch(args.train_batch_tokens, args.train_seq_len, grad_accum_steps)
+                x, y = train_loader.next_batch(args.train_batch_tokens, warmup_seq_len, grad_accum_steps)
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                     warmup_loss = model(x, y)
                 (warmup_loss * grad_scale).backward()
@@ -1008,12 +1158,13 @@ def main() -> None:
 
         elapsed_ms = training_time_ms + 1000.0 * (time.perf_counter() - t0)
         scale = lr_mul(step, elapsed_ms)
+        current_train_seq_len = resolve_train_seq_len(args, elapsed_seconds=elapsed_ms / 1000.0)
         zero_grad_all()
         train_loss = torch.zeros((), device=device)
         for micro_step in range(grad_accum_steps):
             if distributed:
                 model.require_backward_grad_sync = micro_step == grad_accum_steps - 1
-            x, y = train_loader.next_batch(args.train_batch_tokens, args.train_seq_len, grad_accum_steps)
+            x, y = train_loader.next_batch(args.train_batch_tokens, current_train_seq_len, grad_accum_steps)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                 loss = model(x, y)
             train_loss += loss.detach()
@@ -1044,7 +1195,8 @@ def main() -> None:
         if should_log_train:
             log0(
                 f"step:{step}/{args.iterations} train_loss:{train_loss.item():.4f} "
-                f"train_time:{approx_training_time_ms:.0f}ms step_avg:{approx_training_time_ms / step:.2f}ms"
+                f"train_time:{approx_training_time_ms:.0f}ms step_avg:{approx_training_time_ms / step:.2f}ms "
+                f"seq_len:{current_train_seq_len}"
             )
 
         # Needed to sync whether we've reached the wallclock cap.
