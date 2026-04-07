@@ -78,7 +78,7 @@ All pods created for this sprint were stopped/deleted after log recovery.
 Final RunPod state after cleanup:
 
 ```text
-clientBalance: 0.8895682767
+clientBalance: 9.2848015361
 currentSpendPerHr: 0
 ```
 
@@ -98,6 +98,8 @@ Lower `val_bpb` is better.
 | `r7_sliding_control` | `r2` + `EVAL_STRIDE=64` | `final_int8_zlib_sliding_window_exact` | `1.30349569` | `11,493,119` | best completed legal run |
 | `r8_sliding_leaky_ema` | `r2` + LeakyReLU + EMA + stride-64 | `final_int8_zlib_roundtrip_exact` | `1.41370521` | `10,816,788` | interrupted before sliding; already worse |
 | `r8b_sliding_leaky_no_ema` | `r2` + LeakyReLU + stride-64, EMA off | `final_int8_zlib_roundtrip_exact` | `1.30156080` | `11,643,685` | interrupted before sliding; promising but incomplete |
+| `r8b_sliding_leaky_no_ema_retry` | `r2` + LeakyReLU + stride-64, EMA off | `final_int8_zlib_sliding_window_exact` | `1.29661412` | `11,480,224` | matched 600s win |
+| `r9_sliding_leaky_no_ema_1800` | `r8b` config with 1800s cap | `final_int8_zlib_sliding_window_exact` | `1.21339931` | `14,318,706` | non-record confirmation |
 
 ## Interpretation
 
@@ -107,6 +109,8 @@ Confirmed:
 - `TRAIN_SEQ_LEN=4096` plus lower LR is a strong legal improvement over root defaults.
 - LeakyReLU(0.5)-squared is a small but real positive move under the same roundtrip metric.
 - Sliding-window eval is a real metric improvement on the 4096-context control.
+- The completed `r8b` retry confirms the root-safe LeakyReLU + stride-64 path beats the matched stride-64 control by `0.00688157` BPB at the same 600s cap.
+- A longer 1800s non-record confirmation remains under the 16MB cap and reaches `1.21339931` BPB on the same 10-shard 1xH100 setup.
 
 Rejected for this root path:
 
@@ -114,43 +118,26 @@ Rejected for this root path:
 - Muon 0.99 + long warmdown on top of the illegal 11L/3x config regresses badly in this 1xH100/10-shard setting.
 - EMA is strongly harmful under the 10-minute 1xH100 contract. It also reduced compressed size, but metric quality collapsed.
 
-Incomplete:
+Resolved:
 
-- `r8b_sliding_leaky_no_ema` is the best-looking next candidate, but RunPod stopped the pod before the stride-64 metric completed. Its roundtrip metric (`1.30156080`) is better than `r5` and `r2`, and the size is legal, but it is not a completed sliding-window proof.
+- `r8b_sliding_leaky_no_ema` was rerun as `r8b_sliding_leaky_no_ema_retry`; the retry completed the stride-64 final metric successfully.
+- The pod was stopped/deleted after log recovery.
 
 ## Current Recommendation
 
-Do not package this as an upstream PR yet.
+Package as a non-record evidence result, not as an upstream record-track PR.
 
 Reason:
 
-- the best completed legal run is a config/systems stack (`r7`) rather than a novel clean submission package
-- the likely best candidate (`r8b`) is incomplete because stride-64 eval did not finish
-- there is no second-seed or 30-minute confirmation
+- the 600s matched result is real and legal, but it is a 1xH100 / 10-shard result, not the official 8xH100 record-track setup
+- the 1800s confirmation is strong, but it intentionally exceeds the 10-minute wallclock and must be labeled non-record
+- this package is useful evidence and a possible upstream non-record PR candidate, but not a record claim
 
-If another `$5-7` is added, run exactly one next job:
+Created package:
 
-```bash
-RUN_ID=r8b_sliding_leaky_no_ema_retry \
-DATA_PATH=./data/datasets/fineweb10B_sp1024 \
-TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
-VOCAB_SIZE=1024 \
-VAL_LOSS_EVERY=0 \
-MAX_WALLCLOCK_SECONDS=600 \
-SEED=42 \
-TRAIN_SEQ_LEN=4096 \
-MATRIX_LR=0.02 \
-SCALAR_LR=0.02 \
-TIED_EMBED_LR=0.03 \
-EVAL_STRIDE=64 \
-MLP_NEGATIVE_SLOPE=0.5 \
-torchrun --standalone --nproc_per_node=1 train_gpt.py
+```text
+records/track_non_record_16mb/2026-04-07_RootSafeLeakySliding_1xH100/
 ```
-
-Promotion gate:
-
-- if the completed `final_int8_zlib_sliding_window_exact` beats `r7` by any amount and stays under `16,000,000` bytes, run one confirmation
-- otherwise stop this root-safe path and escalate to a dedicated stack bridge script instead of adding more features to root `train_gpt.py`
 
 ## Local Log Locations
 
@@ -167,6 +154,8 @@ logs/runpod/root-stack-sprint/r6_ema.log
 logs/runpod/root-stack-sprint/r7_sliding_control.log
 logs/runpod/root-stack-sprint/r8_sliding_leaky_ema.partial.log
 logs/runpod/root-stack-sprint/r8b_sliding_leaky_no_ema.partial.log
+logs/runpod/root-stack-sprint/r8b_sliding_leaky_no_ema_retry.log
+logs/runpod/root-stack-sprint/r9_sliding_leaky_no_ema_1800.log
 ```
 
-If this becomes a submission package, move the selected control and candidate logs under a new `records/track_non_record_16mb/.../` folder with a README and `submission.json`.
+The selected control and candidate logs are now copied into the non-record package folder with a README and `submission.json`.

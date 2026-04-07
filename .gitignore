@@ -35,6 +35,9 @@ vendor/
 *.log
 !records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/baseline_no_adapter.log
 !records/track_non_record_16mb/2026-03-28_RandomMapAdapters_Stack/random_map_adapter.log
+!records/track_non_record_16mb/2026-04-07_RootSafeLeakySliding_1xH100/control_r7_sliding_control.log
+!records/track_non_record_16mb/2026-04-07_RootSafeLeakySliding_1xH100/r8b_sliding_leaky_no_ema_retry.log
+!records/track_non_record_16mb/2026-04-07_RootSafeLeakySliding_1xH100/r9_sliding_leaky_no_ema_1800.log
 coverage/
 .cache/
 tmp/

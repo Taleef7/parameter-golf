@@ -1,0 +1,11 @@
+{
+  "author": "Taleef Tamsal",
+  "github_id": "Taleef7",
+  "name": "Root-Safe LeakyReLU + Sliding Eval 1xH100",
+  "blurb": "Non-record 1xH100, 10-train-shard root-script stack. Uses TRAIN_SEQ_LEN=4096 with lower LR, LeakyReLU(0.5)^2 MLP, and stride-64 sliding-window final eval. The matched 600s run beats the stride-64 control by 0.00688157 BPB; the 1800s confirmation reaches 1.21339931 BPB under the 16MB int8+zlib cap.",
+  "date": "2026-04-07T23:14:00Z",
+  "val_loss": 2.04877391,
+  "val_bpb": 1.21339931,
+  "bytes_total": 14318706,
+  "bytes_code": 55249
+}
